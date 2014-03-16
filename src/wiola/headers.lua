@@ -4,12 +4,13 @@
 -- Date: 16.03.14
 --
 
-ngx.header["Server"] = "wiola v0.1"
+ngx.header["Server"] = "wiola/Lua v0.1"
 --ngx.header.sec_webSocket_protocol = 'wamp.2.json'
 
 local wsProto = ngx.req.get_headers()["Sec-WebSocket-Protocol"]
 
 ngx.log(ngx.DEBUG, "Client Sec-WebSocket-Protocol: ", wsProto)
+ngx.log(ngx.DEBUG, "Client SID: ", ngx.var.connection)
 
 if wsProto then
 	local wsProtos = {}
@@ -22,7 +23,9 @@ if wsProto then
 	while i <= #wsProtos do
 		if wsProtos[i] == 'wamp.2.json' or wsProtos[i] == 'wamp.2.msgpack' then
 			ngx.header["Sec-WebSocket-Protocol"] = wsProtos[i]
-			i = #wsProtos + 1
+			ngx.log(ngx.DEBUG, "Server Sec-WebSocket-Protocol selected: ", wsProtos[i])
+			wampServer.setWampProtocol(wsProtos[i], ngx.var.connection)
+			break
 		end
 
 		i = i + 1
