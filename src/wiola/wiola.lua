@@ -5,17 +5,18 @@
 --
 
 local _M = {
-	_VERSION = '0.1',
-	_wamp_features = {
-		agent = "wiola/Lua v0.1",
-		roles = {
-			broker = {},
-			dealer = {}
-		}
-	}
+	_VERSION = '0.1'
 }
 
 _M.__index = _M
+
+local wamp_features = {
+	agent = "wiola/Lua v0.1",
+	roles = {
+		broker = {},
+		dealer = {}
+	}
+}
 
 local WAMP_MSG_SPEC = {
 	HELLO = 1,
@@ -99,19 +100,20 @@ end
 -- Add connection to wiola
 function _M.addConnection(conn, sid)
 	local regId = getRegId()
+	local wProto, dataType
 
 	_cache.ids[regId] = true
 	if _cache.requests[sid] then
-		local wProto = _cache.requests[sid].wamp_protocol
+		wProto = _cache.requests[sid].wamp_protocol
 		_cache.requests[sid] = nil
 	else
-		local wProto = _cache._wamp_protocol
+		wProto = _cache._wamp_protocol
 	end
 
 	if wProto == 'wamp.2.msgpack' then
-		local dataType = 'binary'
+		dataType = 'binary'
 	else
-		local dataType = 'text'
+		dataType = 'text'
 	end
 
 	_cache.sessions[regId] = {
@@ -138,6 +140,28 @@ function _M.removeConnection(regId)
 	_cache.ids[regId] = nil
 end
 
+-- Prepare data for sending to client
+local function sendData(session, data)
+	local dataObj
+
+	if session.wamp_protocol == 'wamp.2.msgpack' then
+		local mp = require 'MessagePack'
+		dataObj = mp.pack(data)
+	else --if session.wamp_protocol == 'wamp.2.json'
+		local cjson = require "cjson"
+		dataObj = cjson.encode(data)
+	end
+
+	ngx.log(ngx.DEBUG, "Prepare data for client: ", dataObj);
+
+	if not session.data then
+		session.data = {}
+		session.data[1] = dataObj
+	else
+		session.data[#session.data + 1] = dataObj
+	end
+end
+
 -- Receive data from client
 function _M.receiveData(regId, data)
 	local session = _cache.sessions[regId]
@@ -151,7 +175,80 @@ function _M.receiveData(regId, data)
 		dataObj = cjson.decode(data)
 	end
 
-	ngx.log(ngx.DEBUG, "Received data decoded. WAMP msg Id: ", dataObj[1], " Realm: ", dataObj[2])
+	ngx.log(ngx.DEBUG, "Received data decoded. WAMP msg Id: ", dataObj[1])
+
+	-- Analyze WAMP message ID received
+	if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
+		if session.isWampEstablished == true then
+			-- Protocol error: received second hello message - aborting
+			-- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+		else
+			session.isWampEstablished = true
+			session.realm = dataObj[2]
+			session.wamp_features = dataObj[3]
+			-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+			sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC:
+		-- No response is expected
+	elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
+		if session.isWampEstablished == true then
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.goodbye_and_out" })
+		else
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then   -- WAMP SPEC:
+		if session.isWampEstablished == true then
+
+		else
+
+		end
+	else
+
+	end
 end
 
 -- Retrieve data, available for session

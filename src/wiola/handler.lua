@@ -20,24 +20,6 @@ ngx.log(ngx.DEBUG, "Client SID: ", ngx.var.connection)
 local sessionId, dataType = wampServer.addConnection(webSocket, ngx.var.connection)
 ngx.log(ngx.DEBUG, "Adding connection to list. Session Id: ", sessionId)
 
---ngx.log(ngx.DEBUG, "Sending SID to client")
---local cjson = require "cjson"
---local msg = {}
---msg[1] = { eventType = 'wsInit', wsid = ngx.var.connection }
---local bytes, err = webSocket:send_text(cjson.encode(msg))
---if not bytes then
---	ngx.log(ngx.ERR, "failed to send data: ", err)
---end
---		local cjson = require "cjson"
---		local dataObj = cjson.decode(data)
---
---		if dataObj.eventType == 'modelUpdate' and tonumber(dataObj.wsid) > 0 then
---			putAdminClientsDataToNotify(dataObj, dataObj.wsid)
---		else
---			putAdminClientsDataToNotify(dataObj)
---		end
-
-
 while true do
 	local data, typ, err = webSocket:recv_frame()
 
