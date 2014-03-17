@@ -20,13 +20,15 @@ ngx.log(ngx.DEBUG, "Client SID: ", ngx.var.connection)
 local sessionId, dataType = wampServer.addConnection(webSocket, ngx.var.connection)
 ngx.log(ngx.DEBUG, "Adding connection to list. Session Id: ", sessionId)
 
+local cleanExit = false
+
 while true do
 	local data, typ, err = webSocket:recv_frame()
 
 	local cliData = wampServer.getPendingData(sessionId)
 
 	while #cliData > 0 do
-		ngx.log(ngx.DEBUG, "Get data for client. Sending...")
+		ngx.log(ngx.DEBUG, "Get data for client. DataType is ", dataType, ". Sending...")
 
 		if dataType == 'binary' then
 			local bytes, err = webSocket:send_binary(table.remove(cliData, 1))
@@ -63,6 +65,7 @@ while true do
 				return
 			end
 		wampServer.removeConnection(sessionId)
+		cleanExit = true
 		break
 
 	elseif typ == "ping" then
@@ -92,5 +95,7 @@ while true do
 end
 
 -- Just for clearance
-webSocket:send_close()
-wampServer.removeConnection(sessionId)
+if not cleanExit then
+	webSocket:send_close()
+	wampServer.removeConnection(sessionId)
+end

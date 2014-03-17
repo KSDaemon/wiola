@@ -53,7 +53,8 @@ local _cache = {
 	subscriptions = {},
 	registrations = {},
 	ids = {},
-	requests = {}
+	requests = {},
+	realms = {}
 }
 
 -- Generate unique Id
@@ -136,6 +137,24 @@ end
 
 -- Remove connection from wiola
 function _M.removeConnection(regId)
+	local sr = _cache.sessions[regId].realm
+
+	ngx.log(ngx.DEBUG, "Removing session...")
+	_cache.realms[sr][regId] = nil
+
+	ngx.log(ngx.DEBUG, "Session realm was: ", sr)
+
+	local size = 0
+	for k, v in pairs(_cache.realms[sr]) do
+	  size = size + 1
+	end
+
+	if size == 0 then
+		_cache.realms[sr] = nil
+	end
+
+	ngx.log(ngx.DEBUG, "Realm ", sr, " sessions count now is ", size)
+
 	_cache.sessions[regId] = nil
 	_cache.ids[regId] = nil
 end
@@ -175,7 +194,7 @@ function _M.receiveData(regId, data)
 		dataObj = cjson.decode(data)
 	end
 
-	ngx.log(ngx.DEBUG, "Received data decoded. WAMP msg Id: ", dataObj[1])
+	ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data decoded. WAMP msg Id: ", dataObj[1])
 
 	-- Analyze WAMP message ID received
 	if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
@@ -184,9 +203,17 @@ function _M.receiveData(regId, data)
 			-- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		else
+			local realm = dataObj[2]
 			session.isWampEstablished = true
-			session.realm = dataObj[2]
+			session.realm = realm
 			session.wamp_features = dataObj[3]
+
+			if _cache.realms[realm] == nil then
+				ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
+				_cache.realms[realm] = { }
+			end
+			_cache.realms[realm][regId] = session
+
 			-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
 			sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
 		end
@@ -208,43 +235,43 @@ function _M.receiveData(regId, data)
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then   -- WAMP SPEC:
 		if session.isWampEstablished == true then
 
 		else
-
+			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	else
 
