@@ -4,13 +4,10 @@
 -- Date: 16.03.14
 --
 
-wsServer = require "resty.websocket.server"
-
-wampServer = require "wiola"
-
 function var_dump(value, depth, key)
   local linePrefix = ""
   local spaces = ""
+  local mTable
 
   if key ~= nil then
     linePrefix = "["..key.."] = "

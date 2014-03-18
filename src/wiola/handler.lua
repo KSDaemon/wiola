@@ -3,6 +3,8 @@
 -- User: kostik
 -- Date: 16.03.14
 --
+local wsServer = require "resty.websocket.server"
+local wampServer = require "wiola"
 
 local webSocket, err = wsServer:new({
 	timeout = 5000,
@@ -15,30 +17,31 @@ if not webSocket then
 end
 
 ngx.log(ngx.DEBUG, "Created websocket")
-ngx.log(ngx.DEBUG, "Client SID: ", ngx.var.connection)
 
-local sessionId, dataType = wampServer.addConnection(webSocket, ngx.var.connection)
-ngx.log(ngx.DEBUG, "Adding connection to list. Session Id: ", sessionId)
+local sessionId, dataType = wampServer.addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
+ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection, " Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
 local cleanExit = false
 
 while true do
 	local data, typ, err = webSocket:recv_frame()
 
-	local cliData = wampServer.getPendingData(sessionId)
+	local cliData, cliErr = wampServer.getPendingData(sessionId)
 
-	while #cliData > 0 do
-		ngx.log(ngx.DEBUG, "Get data for client. DataType is ", dataType, ". Sending...")
+	while cliData ~= ngx.null do
+		ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
 
 		if dataType == 'binary' then
-			local bytes, err = webSocket:send_binary(table.remove(cliData, 1))
+			local bytes, err = webSocket:send_binary(cliData)
 		else
-			local bytes, err = webSocket:send_text(table.remove(cliData, 1))
+			local bytes, err = webSocket:send_text(cliData)
 		end
 
 		if not bytes then
 			ngx.log(ngx.ERR, "Failed to send data: ", err)
 		end
+
+		cliData, cliErr = wampServer.getPendingData(sessionId)
 	end
 
 	if webSocket.fatal then

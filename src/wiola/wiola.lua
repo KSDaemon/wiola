@@ -4,6 +4,15 @@
 -- Date: 16.03.14
 --
 
+local redisLib = require "resty.redis"
+local redis = redisLib:new()
+
+local ok, err = redis:connect("unix:/tmp/redis.sock")
+if not ok then
+	ngx.say("failed to connect: ", err)
+	return
+end
+
 local _M = {
 	_VERSION = '0.1'
 }
@@ -47,7 +56,6 @@ local WAMP_MSG_SPEC = {
 }
 
 local _cache = {
-	_wamp_protocol = 'wamp.2.json',
 	sessions = {},
 	publications = {},
 	subscriptions = {},
@@ -60,31 +68,19 @@ local _cache = {
 -- Generate unique Id
 local function getRegId()
 	local regId
-	local uniqFl = false
 
 	math.randomseed( os.time() )
 
-	while not uniqFl do
+	repeat
 --		regId = math.random(9007199254740992)
 		regId = math.random(100000000000000)
-		local foundFl = false
+	until redis:sismember("wiolaIds",regId)
 
-		for k,v in pairs(_cache.ids) do
-			if k == regId then
-				foundFl = true
-				break
-			end
-		end
-
-		if not foundFl then
-			uniqFl = true
-		end
-	end
 	return regId
 end
 
 -- Validate uri for WAMP requirements
-local function validateURI (uri)
+local function validateURI(uri)
 --	var re = /^([0-9a-z_]{2,}\.)*([0-9a-z_]{2,})$/;
 --	if(!re.test(uri) || uri.indexOf('wamp') === 0) {
 --		return false;
@@ -93,22 +89,28 @@ local function validateURI (uri)
 --	}
 end
 
--- Put selected wamp subprotocol for sid into temp cache
-function _M.setWampProtocol(p, sid)
-	_cache.requests[sid] = { wamp_protocol = p }
+-- Convert redis hgetall array to lua table
+local function redisArr2table(ra)
+	local t = {}
+	local i = 1
+
+	while i < #ra do
+		t[ra[i]] = ra[i+1]
+		i = i + 2
+	end
+
+	return t
 end
 
 -- Add connection to wiola
-function _M.addConnection(conn, sid)
+function _M.addConnection(sid, wampProto)
 	local regId = getRegId()
 	local wProto, dataType
 
-	_cache.ids[regId] = true
-	if _cache.requests[sid] then
-		wProto = _cache.requests[sid].wamp_protocol
-		_cache.requests[sid] = nil
-	else
-		wProto = _cache._wamp_protocol
+	redis:sadd("wiolaIds",regId)
+
+	if wampProto == nil or wampProto == "" then
+		wampProto = 'wamp.2.json'   -- Setting default protocol for encoding/decodig use
 	end
 
 	if wProto == 'wamp.2.msgpack' then
@@ -117,46 +119,40 @@ function _M.addConnection(conn, sid)
 		dataType = 'text'
 	end
 
-	_cache.sessions[regId] = {
-		ws = conn,
-		sid = sid,
-		isWampEstablished = false,
-		realm = nil,
-		wamp_features = nil,
-		wamp_protocol = wProto,
-		dataType = dataType,
-		data = {}
-	}
-	return regId, dataType
-end
+	local res, err = redis:hmset("wiolaSession" .. regId,
+		{ connId = sid,
+		sessId = regId,
+		isWampEstablished = 1,
+--		realm = nil,
+--		wamp_features = nil,
+		wamp_protocol = wampProto,
+		dataType = dataType }
+	)
 
--- Confirm WAMP session establishment (not websocket)
-function _M.confirmWampEstablishment(regId)
-	_cache.sessions[regId].isWampEstablished = true
+	ngx.log(ngx.DEBUG, "redis:hmset wiolaSessionKey: ", wiolaSessionKey, " Result: ", err)
+
+	return regId, dataType
 end
 
 -- Remove connection from wiola
 function _M.removeConnection(regId)
-	local sr = _cache.sessions[regId].realm
+	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
 
-	ngx.log(ngx.DEBUG, "Removing session...")
-	_cache.realms[sr][regId] = nil
+	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
-	ngx.log(ngx.DEBUG, "Session realm was: ", sr)
+	redis:srem("wiolaRealm" .. session.realm .. "Sessions",regId)
 
-	local size = 0
-	for k, v in pairs(_cache.realms[sr]) do
-	  size = size + 1
+	local rs = redis:scard("wiolaRealm" .. session.realm .. "Sessions")
+
+	if rs == 0 then
+		redis:del("wiolaRealm" .. session.realm .. "Sessions")
 	end
 
-	if size == 0 then
-		_cache.realms[sr] = nil
-	end
+	ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 
-	ngx.log(ngx.DEBUG, "Realm ", sr, " sessions count now is ", size)
-
-	_cache.sessions[regId] = nil
-	_cache.ids[regId] = nil
+	redis:del("wiolaSession" .. regId .. "Data")
+	redis:del("wiolaSession" .. regId)
+	redis:srem("wiolaIds",regId)
 end
 
 -- Prepare data for sending to client
@@ -171,20 +167,17 @@ local function sendData(session, data)
 		dataObj = cjson.encode(data)
 	end
 
-	ngx.log(ngx.DEBUG, "Prepare data for client: ", dataObj);
+	ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj);
 
-	if not session.data then
-		session.data = {}
-		session.data[1] = dataObj
-	else
-		session.data[#session.data + 1] = dataObj
-	end
+	redis:rpush("wiolaSession" .. session.sessId .. "Data", dataObj)
 end
 
 -- Receive data from client
 function _M.receiveData(regId, data)
-	local session = _cache.sessions[regId]
+	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
 	local dataObj
+
+	var_dump(session)
 
 	if session.wamp_protocol == 'wamp.2.msgpack' then
 		local mp = require 'MessagePack'
@@ -198,21 +191,22 @@ function _M.receiveData(regId, data)
 
 	-- Analyze WAMP message ID received
 	if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 			-- Protocol error: received second hello message - aborting
 			-- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		else
 			local realm = dataObj[2]
-			session.isWampEstablished = true
+			session.isWampEstablished = 1
 			session.realm = realm
-			session.wamp_features = dataObj[3]
+			redis:hmset("wiolaSessionFeatures" .. regId, dataObj[3])
 
-			if _cache.realms[realm] == nil then
+			if not redis:sismember("wiolaRealms",realm) then
 				ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
-				_cache.realms[realm] = { }
+				redis:sadd("wiolaIds",regId)
 			end
-			_cache.realms[realm][regId] = session
+
+			redis:sadd("wiolaRealm" .. realm .. "Sessions", regId)
 
 			-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
 			sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
@@ -220,55 +214,55 @@ function _M.receiveData(regId, data)
 	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC:
 		-- No response is expected
 	elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.goodbye_and_out" })
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then   -- WAMP SPEC:
-		if session.isWampEstablished == true then
+		if session.isWampEstablished == 1 then
 
 		else
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
@@ -280,7 +274,7 @@ end
 
 -- Retrieve data, available for session
 function _M.getPendingData(regId)
-	return _cache.sessions[regId].data
+	return redis:lpop("wiolaSession" .. regId .. "Data")
 end
 
 return _M
