@@ -153,6 +153,7 @@ function _M.removeConnection(regId)
 	ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 
 	redis:del("wiolaSession" .. regId .. "Data")
+	redis:del("wiolaSessionFeatures" .. regId)
 	redis:del("wiolaSession" .. regId)
 	redis:srem("wiolaIds",regId)
 end
@@ -177,15 +178,15 @@ end
 -- Receive data from client
 function _M.receiveData(regId, data)
 	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
+	local cjson = require "cjson"
 	local dataObj
 
-	var_dump(session)
+--	var_dump(session)
 
 	if session.wamp_protocol == 'wamp.2.msgpack' then
 		local mp = require 'MessagePack'
 		dataObj = mp.unpack(data)
 	else --if session.wamp_protocol == 'wamp.2.json'
-		local cjson = require "cjson"
 		dataObj = cjson.decode(data)
 	end
 
@@ -202,7 +203,7 @@ function _M.receiveData(regId, data)
 			session.isWampEstablished = 1
 			session.realm = realm
 			redis:hmset("wiolaSession" .. regId, session)
-			redis:hmset("wiolaSessionFeatures" .. regId, dataObj[3])
+			redis:set("wiolaSessionFeatures" .. regId, cjson.encode(dataObj[3]))
 
 			if not redis:sismember("wiolaRealms",realm) then
 				ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
