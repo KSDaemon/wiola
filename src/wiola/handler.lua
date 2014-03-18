@@ -62,12 +62,12 @@ while true do
 	elseif typ == "close" then
 
 		ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
+		wampServer.removeConnection(sessionId)
 		local bytes, err = webSocket:send_close(1000, "Closing connection")
 			if not bytes then
 				ngx.log(ngx.ERR, "Failed to send the close frame: ", err)
 				return
 			end
-		wampServer.removeConnection(sessionId)
 		cleanExit = true
 		break
 

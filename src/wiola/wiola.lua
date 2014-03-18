@@ -138,6 +138,8 @@ end
 function _M.removeConnection(regId)
 	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
 
+	var_dump(session)
+
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
 	redis:srem("wiolaRealm" .. session.realm .. "Sessions",regId)
@@ -199,6 +201,7 @@ function _M.receiveData(regId, data)
 			local realm = dataObj[2]
 			session.isWampEstablished = 1
 			session.realm = realm
+			redis:hmset("wiolaSession" .. regId, session)
 			redis:hmset("wiolaSessionFeatures" .. regId, dataObj[3])
 
 			if not redis:sismember("wiolaRealms",realm) then
