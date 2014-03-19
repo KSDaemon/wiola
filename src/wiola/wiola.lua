@@ -129,8 +129,6 @@ function _M.addConnection(sid, wampProto)
 		dataType = dataType }
 	)
 
-	ngx.log(ngx.DEBUG, "redis:hmset wiolaSessionKey: ", wiolaSessionKey, " Result: ", err)
-
 	return regId, dataType
 end
 
@@ -153,7 +151,6 @@ function _M.removeConnection(regId)
 	ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 
 	redis:del("wiolaSession" .. regId .. "Data")
-	redis:del("wiolaSessionFeatures" .. regId)
 	redis:del("wiolaSession" .. regId)
 	redis:srem("wiolaIds",regId)
 end
@@ -202,8 +199,8 @@ function _M.receiveData(regId, data)
 			local realm = dataObj[2]
 			session.isWampEstablished = 1
 			session.realm = realm
+			session.wampFeatures = cjson.encode(dataObj[3])
 			redis:hmset("wiolaSession" .. regId, session)
-			redis:set("wiolaSessionFeatures" .. regId, cjson.encode(dataObj[3]))
 
 			if not redis:sismember("wiolaRealms",realm) then
 				ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
