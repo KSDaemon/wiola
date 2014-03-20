@@ -113,7 +113,7 @@ function _M.addConnection(sid, wampProto)
 		wampProto = 'wamp.2.json'   -- Setting default protocol for encoding/decodig use
 	end
 
-	if wProto == 'wamp.2.msgpack' then
+	if wampProto == 'wamp.2.msgpack' then
 		dataType = 'binary'
 	else
 		dataType = 'text'
@@ -158,7 +158,7 @@ function _M.removeConnection(regId)
 end
 
 -- Prepare data for sending to client
-local function sendData(session, data)
+local function putData(session, data)
 	local dataObj
 
 	if session.wamp_protocol == 'wamp.2.msgpack' then
@@ -196,7 +196,7 @@ function _M.receiveData(regId, data)
 		if session.isWampEstablished == 1 then
 			-- Protocol error: received second hello message - aborting
 			-- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		else
 			local realm = dataObj[2]
 			if validateURI(realm) then
@@ -213,19 +213,19 @@ function _M.receiveData(regId, data)
 				redis:sadd("wiolaRealm" .. realm .. "Sessions", regId)
 
 				-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
-				sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+				putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
 			else
 				-- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
-				sendData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_realm" })
+				putData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_realm" })
 			end
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC:
 		-- No response is expected
 	elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
 		if session.isWampEstablished == 1 then
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.goodbye_and_out" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.goodbye_and_out" })
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
@@ -237,43 +237,43 @@ function _M.receiveData(regId, data)
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then   -- WAMP SPEC:
 		if session.isWampEstablished == 1 then
 
 		else
-			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	else
 
