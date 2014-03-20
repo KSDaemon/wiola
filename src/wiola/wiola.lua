@@ -81,12 +81,12 @@ end
 
 -- Validate uri for WAMP requirements
 local function validateURI(uri)
---	var re = /^([0-9a-z_]{2,}\.)*([0-9a-z_]{2,})$/;
---	if(!re.test(uri) || uri.indexOf('wamp') === 0) {
---		return false;
---	} else {
---		return true;
---	}
+	local m, err = ngx.re.match(uri, "^([0-9a-z_]{2,}\\\\.)*([0-9a-z_]{2,})$")
+	if not m or string.find(uri, 'wamp') == 1 then
+		return false
+	else
+		return true
+	end
 end
 
 -- Convert redis hgetall array to lua table
@@ -140,15 +140,17 @@ function _M.removeConnection(regId)
 
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
-	redis:srem("wiolaRealm" .. session.realm .. "Sessions",regId)
+	if session.realm then
+		redis:srem("wiolaRealm" .. session.realm .. "Sessions",regId)
 
-	local rs = redis:scard("wiolaRealm" .. session.realm .. "Sessions")
+		local rs = redis:scard("wiolaRealm" .. session.realm .. "Sessions")
 
-	if rs == 0 then
-		redis:del("wiolaRealm" .. session.realm .. "Sessions")
+		if rs == 0 then
+			redis:del("wiolaRealm" .. session.realm .. "Sessions")
+		end
+
+		ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 	end
-
-	ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 
 	redis:del("wiolaSession" .. regId .. "Data")
 	redis:del("wiolaSession" .. regId)
@@ -197,20 +199,25 @@ function _M.receiveData(regId, data)
 			sendData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		else
 			local realm = dataObj[2]
-			session.isWampEstablished = 1
-			session.realm = realm
-			session.wampFeatures = cjson.encode(dataObj[3])
-			redis:hmset("wiolaSession" .. regId, session)
+			if validateURI(realm) then
+				session.isWampEstablished = 1
+				session.realm = realm
+				session.wampFeatures = cjson.encode(dataObj[3])
+				redis:hmset("wiolaSession" .. regId, session)
 
-			if not redis:sismember("wiolaRealms",realm) then
-				ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
-				redis:sadd("wiolaIds",regId)
+				if not redis:sismember("wiolaRealms",realm) then
+					ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
+					redis:sadd("wiolaIds",regId)
+				end
+
+				redis:sadd("wiolaRealm" .. realm .. "Sessions", regId)
+
+				-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+				sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+			else
+				-- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+				sendData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_realm" })
 			end
-
-			redis:sadd("wiolaRealm" .. realm .. "Sessions", regId)
-
-			-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
-			sendData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC:
 		-- No response is expected
