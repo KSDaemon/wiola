@@ -55,16 +55,6 @@ local WAMP_MSG_SPEC = {
 	YIELD = 70
 }
 
-local _cache = {
-	sessions = {},
-	publications = {},
-	subscriptions = {},
-	registrations = {},
-	ids = {},
-	requests = {},
-	realms = {}
-}
-
 -- Generate unique Id
 local function getRegId()
 	local regId
@@ -119,7 +109,7 @@ function _M.addConnection(sid, wampProto)
 		dataType = 'text'
 	end
 
-	local res, err = redis:hmset("wiolaSession" .. regId,
+	redis:hmset("wiolaSession" .. regId,
 		{ connId = sid,
 		sessId = regId,
 		isWampEstablished = 1,
