@@ -9,7 +9,7 @@ local redis = redisLib:new()
 
 local ok, err = redis:connect("unix:/tmp/redis.sock")
 if not ok then
-	ngx.say("failed to connect: ", err)
+	ngx.log(ngx.DEBUG, "Failed to connect to redis: ", err)
 	return
 end
 
@@ -112,7 +112,7 @@ function _M.addConnection(sid, wampProto)
 	redis:hmset("wiolaSession" .. regId,
 		{ connId = sid,
 		sessId = regId,
-		isWampEstablished = 1,
+		isWampEstablished = 0,
 --		realm = nil,
 --		wamp_features = nil,
 		wamp_protocol = wampProto,
@@ -142,6 +142,17 @@ function _M.removeConnection(regId)
 		ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 	end
 
+	local subscriptions = redis:hgetall("wiolaSession" .. regId .. "Subscriptions")
+
+	for k, v in pairs(subscriptions) do
+		redis:srem("wiolaSubscription" .. k .. "Sessions", regId)
+		if redis:scard("wiolaSubscription" .. k .. "Sessions") == 0 then
+			redis:srem("wiolaSubscriptions",k)
+		end
+	end
+
+	redis:del("wiolaSession" .. regId .. "Subscriptions")
+	redis:del("wiolaSession" .. regId .. "RevSubscriptions")
 	redis:del("wiolaSession" .. regId .. "Data")
 	redis:del("wiolaSession" .. regId)
 	redis:srem("wiolaIds",regId)
@@ -167,6 +178,7 @@ end
 -- Receive data from client
 function _M.receiveData(regId, data)
 	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
+	session.isWampEstablished = tonumber(session.isWampEstablished)
 	local cjson = require "cjson"
 	local dataObj
 
@@ -209,7 +221,7 @@ function _M.receiveData(regId, data)
 				putData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_realm" })
 			end
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
 		-- No response is expected
 	elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
 		if session.isWampEstablished == 1 then
@@ -217,49 +229,91 @@ function _M.receiveData(regId, data)
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then
+		-- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
+		-- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
+		-- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
 
 		else
 
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then   -- WAMP SPEC:
-		if session.isWampEstablished == 1 then
-
-		else
-			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
-		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC:
-		if session.isWampEstablished == 1 then
-
-		else
-			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
-		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
+		-- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri]
+		-- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list]
+		-- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
 
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
+		if session.isWampEstablished == 1 then
+			if validateURI(dataObj[4]) then
+				redis:sadd("wiolaSubscriptions",dataObj[4])
+
+				if redis:hget("wiolaSession" .. regId .. "Subscriptions", dataObj[4]) ~= ngx.null then
+					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.already_subscribed" })
+				else
+					local subscriptionId = getRegId()
+					redis:hset("wiolaSession" .. regId .. "Subscriptions", dataObj[4], subscriptionId)
+					redis:hset("wiolaSession" .. regId .. "RevSubscriptions", subscriptionId, dataObj[4])
+					redis:sadd("wiolaSubscription" .. dataObj[4] .. "Sessions",regId)
+
+					-- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
+					putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
+				end
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.invalid_topic" })
+			end
+		else
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC: [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
+		if session.isWampEstablished == 1 then
+			local subscr = redis:hget("wiolaSession" .. regId .. "RevSubscriptions", dataObj[3])
+			if subscr ~= ngx.null then
+				redis:hdel("wiolaSession" .. regId .. "Subscriptions", subscr)
+				redis:hdel("wiolaSession" .. regId .. "RevSubscriptions", dataObj[3])
+
+				redis:srem("wiolaSubscription" .. subscr .. "Sessions", regId)
+				if redis:scard("wiolaSubscription" .. subscr .. "Sessions") == 0 then
+					redis:srem("wiolaSubscriptions",subscr)
+				end
+
+				-- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
+				putData(session, { WAMP_MSG_SPEC.UNSUBSCRIBED, dataObj[2] })
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.UNSUBSCRIBE, dataObj[2], {}, "wamp.error.no_such_subscription" })
+			end
+		else
+			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
+		end
+	elseif dataObj[1] == WAMP_MSG_SPEC.CALL then
+		-- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri]
+		-- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list]
+		-- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
 
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
 		if session.isWampEstablished == 1 then
 
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC: [UNREGISTER, Request|id, REGISTERED.Registration|id]
 		if session.isWampEstablished == 1 then
 
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
-	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then   -- WAMP SPEC:
+	elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then
+		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict]
+		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]
+		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
 
 		else
