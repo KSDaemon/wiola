@@ -110,7 +110,7 @@ function _M.addConnection(sid, wampProto)
 		dataType = 'text'
 	end
 
-	redis:hmset("wiolaSession" .. regId,
+	redis:hmset("wiSes" .. regId,
 		{ connId = sid,
 		sessId = regId,
 		isWampEstablished = 0,
@@ -125,37 +125,29 @@ end
 
 -- Remove connection from wiola
 function _M.removeConnection(regId)
-	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
+	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
 
 	var_dump(session)
 
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
 	if session.realm then
-		redis:srem("wiolaRealm" .. session.realm .. "Sessions",regId)
-
-		local rs = redis:scard("wiolaRealm" .. session.realm .. "Sessions")
-
-		if rs == 0 then
-			redis:del("wiolaRealm" .. session.realm .. "Sessions")
-		end
-
-		ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
+		redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
 	end
 
-	local subscriptions = redisArr2table(redis:hgetall("wiolaSession" .. regId .. "Subscriptions"))
+	local subscriptions = redisArr2table(redis:hgetall("wiSes" .. regId .. "Subs"))
 
 	for k, v in pairs(subscriptions) do
-		redis:srem("wiolaRealm" .. session.realm .. "Subscription" .. k .. "Sessions", regId)
-		if redis:scard("wiolaRealm" .. session.realm .. "Subscription" .. k .. "Sessions") == 0 then
-			redis:srem("wiolaRealm" .. session.realm .. "Subscriptions",k)
+		redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
+		if redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
+			redis:srem("wiRealm" .. session.realm .. "Subs",k)
 		end
 	end
 
-	redis:del("wiolaSession" .. regId .. "Subscriptions")
-	redis:del("wiolaSession" .. regId .. "RevSubscriptions")
-	redis:del("wiolaSession" .. regId .. "Data")
-	redis:del("wiolaSession" .. regId)
+	redis:del("wiSes" .. regId .. "Subs")
+	redis:del("wiSes" .. regId .. "RevSubs")
+	redis:del("wiSes" .. regId .. "Data")
+	redis:del("wiSes" .. regId)
 	redis:srem("wiolaIds",regId)
 end
 
@@ -173,12 +165,12 @@ local function putData(session, data)
 
 	ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj);
 
-	redis:rpush("wiolaSession" .. session.sessId .. "Data", dataObj)
+	redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
 end
 
 -- Receive data from client
 function _M.receiveData(regId, data)
-	local session = redisArr2table(redis:hgetall("wiolaSession" .. regId))
+	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
 	session.isWampEstablished = tonumber(session.isWampEstablished)
 	local cjson = require "cjson"
 	local dataObj
@@ -206,14 +198,14 @@ function _M.receiveData(regId, data)
 				session.isWampEstablished = 1
 				session.realm = realm
 				session.wampFeatures = cjson.encode(dataObj[3])
-				redis:hmset("wiolaSession" .. regId, session)
+				redis:hmset("wiSes" .. regId, session)
 
 				if not redis:sismember("wiolaRealms",realm) then
 					ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
 					redis:sadd("wiolaIds",regId)
 				end
 
-				redis:sadd("wiolaRealm" .. realm .. "Sessions", regId)
+				redis:sadd("wiRealm" .. realm .. "Sessions", regId)
 
 				-- WAMP SPEC: [WELCOME, Session|id, Details|dict]
 				putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
@@ -251,15 +243,15 @@ function _M.receiveData(regId, data)
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
 		if session.isWampEstablished == 1 then
 			if validateURI(dataObj[4]) then
-				redis:sadd("wiolaRealm" .. session.realm .. "Subscriptions",dataObj[4])
+				redis:sadd("wiRealm" .. session.realm .. "Subs",dataObj[4])
 
-				if redis:hget("wiolaSession" .. regId .. "Subscriptions", dataObj[4]) ~= ngx.null then
+				if redis:hget("wiSes" .. regId .. "Subs", dataObj[4]) ~= ngx.null then
 					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.already_subscribed" })
 				else
 					local subscriptionId = getRegId()
-					redis:hset("wiolaSession" .. regId .. "Subscriptions", dataObj[4], subscriptionId)
-					redis:hset("wiolaSession" .. regId .. "RevSubscriptions", subscriptionId, dataObj[4])
-					redis:sadd("wiolaRealm" .. session.realm .. "Subscription" .. dataObj[4] .. "Sessions",regId)
+					redis:hset("wiSes" .. regId .. "Subs", dataObj[4], subscriptionId)
+					redis:hset("wiSes" .. regId .. "RevSubs", subscriptionId, dataObj[4])
+					redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions",regId)
 
 					-- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
 					putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
@@ -272,14 +264,14 @@ function _M.receiveData(regId, data)
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC: [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
 		if session.isWampEstablished == 1 then
-			local subscr = redis:hget("wiolaSession" .. regId .. "RevSubscriptions", dataObj[3])
+			local subscr = redis:hget("wiSes" .. regId .. "RevSubs", dataObj[3])
 			if subscr ~= ngx.null then
-				redis:hdel("wiolaSession" .. regId .. "Subscriptions", subscr)
-				redis:hdel("wiolaSession" .. regId .. "RevSubscriptions", dataObj[3])
+				redis:hdel("wiSes" .. regId .. "Subs", subscr)
+				redis:hdel("wiSes" .. regId .. "RevSubs", dataObj[3])
 
-				redis:srem("wiolaRealm" .. session.realm .. "Subscription" .. subscr .. "Sessions", regId)
-				if redis:scard("wiolaRealm" .. session.realm .. "Subscription" .. subscr .. "Sessions") == 0 then
-					redis:srem("wiolaRealm" .. session.realm .. "Subscriptions",subscr)
+				redis:srem("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions", regId)
+				if redis:scard("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions") == 0 then
+					redis:srem("wiRealm" .. session.realm .. "Subs",subscr)
 				end
 
 				-- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
@@ -327,7 +319,7 @@ end
 
 -- Retrieve data, available for session
 function _M.getPendingData(regId)
-	return redis:lpop("wiolaSession" .. regId .. "Data")
+	return redis:lpop("wiSes" .. regId .. "Data")
 end
 
 return _M
