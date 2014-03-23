@@ -60,6 +60,7 @@ local function getRegId()
 	local regId
 
 	math.randomseed( os.time() )
+	-- can use redis:time()
 
 	repeat
 --		regId = math.random(9007199254740992)
@@ -142,12 +143,12 @@ function _M.removeConnection(regId)
 		ngx.log(ngx.DEBUG, "Realm ", session.realm, " sessions count now is ", rs)
 	end
 
-	local subscriptions = redis:hgetall("wiolaSession" .. regId .. "Subscriptions")
+	local subscriptions = redisArr2table(redis:hgetall("wiolaSession" .. regId .. "Subscriptions"))
 
 	for k, v in pairs(subscriptions) do
-		redis:srem("wiolaSubscription" .. k .. "Sessions", regId)
-		if redis:scard("wiolaSubscription" .. k .. "Sessions") == 0 then
-			redis:srem("wiolaSubscriptions",k)
+		redis:srem("wiolaRealm" .. session.realm .. "Subscription" .. k .. "Sessions", regId)
+		if redis:scard("wiolaRealm" .. session.realm .. "Subscription" .. k .. "Sessions") == 0 then
+			redis:srem("wiolaRealm" .. session.realm .. "Subscriptions",k)
 		end
 	end
 
@@ -250,7 +251,7 @@ function _M.receiveData(regId, data)
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
 		if session.isWampEstablished == 1 then
 			if validateURI(dataObj[4]) then
-				redis:sadd("wiolaSubscriptions",dataObj[4])
+				redis:sadd("wiolaRealm" .. session.realm .. "Subscriptions",dataObj[4])
 
 				if redis:hget("wiolaSession" .. regId .. "Subscriptions", dataObj[4]) ~= ngx.null then
 					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.already_subscribed" })
@@ -258,7 +259,7 @@ function _M.receiveData(regId, data)
 					local subscriptionId = getRegId()
 					redis:hset("wiolaSession" .. regId .. "Subscriptions", dataObj[4], subscriptionId)
 					redis:hset("wiolaSession" .. regId .. "RevSubscriptions", subscriptionId, dataObj[4])
-					redis:sadd("wiolaSubscription" .. dataObj[4] .. "Sessions",regId)
+					redis:sadd("wiolaRealm" .. session.realm .. "Subscription" .. dataObj[4] .. "Sessions",regId)
 
 					-- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
 					putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
@@ -276,9 +277,9 @@ function _M.receiveData(regId, data)
 				redis:hdel("wiolaSession" .. regId .. "Subscriptions", subscr)
 				redis:hdel("wiolaSession" .. regId .. "RevSubscriptions", dataObj[3])
 
-				redis:srem("wiolaSubscription" .. subscr .. "Sessions", regId)
-				if redis:scard("wiolaSubscription" .. subscr .. "Sessions") == 0 then
-					redis:srem("wiolaSubscriptions",subscr)
+				redis:srem("wiolaRealm" .. session.realm .. "Subscription" .. subscr .. "Sessions", regId)
+				if redis:scard("wiolaRealm" .. session.realm .. "Subscription" .. subscr .. "Sessions") == 0 then
+					redis:srem("wiolaRealm" .. session.realm .. "Subscriptions",subscr)
 				end
 
 				-- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
