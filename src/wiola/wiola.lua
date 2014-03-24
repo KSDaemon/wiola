@@ -22,7 +22,12 @@ _M.__index = _M
 local wamp_features = {
 	agent = "wiola/Lua v0.1",
 	roles = {
-		broker = {},
+		broker = {
+			features = {
+				subscriber_blackwhite_listing = true,
+				publisher_exclusion = true
+			}
+		},
 		dealer = {}
 	}
 }
@@ -168,6 +173,25 @@ local function putData(session, data)
 	redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
 end
 
+-- Publish event to sessions
+local function publishEvent(sessIds, topic, pubId, args, argsKW)
+	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
+	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
+	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
+	for k, v in ipairs(sessIds) do
+		local session = redisArr2table(redis:hgetall("wiSes" .. v))
+		local subId = tonumber(redis:hget("wiSes" .. v .. "Subs", topic))
+
+		if not args and not argsKW then
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {} })
+		elseif args and not argsKW then
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {}, args })
+		else
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {}, args, argsKW })
+		end
+	end
+end
+
 -- Receive data from client
 function _M.receiveData(regId, data)
 	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
@@ -236,7 +260,40 @@ function _M.receiveData(regId, data)
 		-- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list]
 		-- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
+			if validateURI(dataObj[4]) then
+				local pubId = getRegId()
+				local ss = {}
+				local tmpK = "wiSes" .. regId .. "TmpSet"
 
+				if dataObj[3].exclude then  -- There is exclude list
+					for k, v in ipairs(dataObj[3].exclude) do
+						redis:sadd(tmpK, v)
+					end
+					ss = redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
+					redis:del(tmpK)
+				elseif dataObj[3].eligible then -- There is eligible list
+					for k, v in ipairs(dataObj[3].eligible) do
+						redis:sadd(tmpK, v)
+					end
+					ss = redis:sinter("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
+					redis:del(tmpK)
+				elseif dataObj[3].exclude_me and dataObj[3].exclude_me == false then    -- Do not exclude me
+					ss = redis:smembers("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
+				else -- Usual behaviour
+					redis:sadd(tmpK, regId)
+					ss = redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
+					redis:del(tmpK)
+				end
+
+				publishEvent(ss, dataObj[4], pubId, dataObj[5], dataObj[6])
+
+				if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
+					-- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
+					putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
+				end
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.PUBLISH, dataObj[2], {}, "wamp.error.invalid_topic" })
+			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
