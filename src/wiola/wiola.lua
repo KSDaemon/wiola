@@ -266,20 +266,38 @@ function _M.receiveData(regId, data)
 				local tmpK = "wiSes" .. regId .. "TmpSet"
 
 				if dataObj[3].exclude then  -- There is exclude list
+					ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
 					for k, v in ipairs(dataObj[3].exclude) do
 						redis:sadd(tmpK, v)
 					end
+
+					if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
+						redis:sadd(tmpK, regId)
+					end
+
 					ss = redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
 					redis:del(tmpK)
 				elseif dataObj[3].eligible then -- There is eligible list
+					ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
 					for k, v in ipairs(dataObj[3].eligible) do
 						redis:sadd(tmpK, v)
 					end
-					ss = redis:sinter("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
+
+					redis:sinterstore("wiSes" .. regId .. "TmpSetInter", "wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
+
 					redis:del(tmpK)
-				elseif dataObj[3].exclude_me and dataObj[3].exclude_me == false then    -- Do not exclude me
+					if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
+						redis:sadd(tmpK, regId)
+					end
+
+					ss = redis:sdiff("wiSes" .. regId .. "TmpSetInter", tmpK)
+					redis:del(tmpK)
+					redis:del("wiSes" .. regId .. "TmpSetInter")
+				elseif dataObj[3].exclude_me ~= nil and dataObj[3].exclude_me == false then    -- Do not exclude me
+					ngx.log(ngx.DEBUG, "PUBLISH: Do not exclude me: ", dataObj[3].exclude_me, dataObj[3].exclude_me == false);
 					ss = redis:smembers("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
 				else -- Usual behaviour
+					ngx.log(ngx.DEBUG, "PUBLISH: Usual behaviour")
 					redis:sadd(tmpK, regId)
 					ss = redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
 					redis:del(tmpK)
