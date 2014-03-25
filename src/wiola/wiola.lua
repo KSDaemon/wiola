@@ -63,9 +63,10 @@ local WAMP_MSG_SPEC = {
 -- Generate unique Id
 local function getRegId()
 	local regId
+	local time = redis:time()
 
-	math.randomseed( os.time() )
-	-- can use redis:time()
+--	math.randomseed( os.time() ) -- Precision - only seconds, which doesn't acceptable
+	math.randomseed( time[1] * 1000000 + time[2] )
 
 	repeat
 --		regId = math.random(9007199254740992)
@@ -132,7 +133,7 @@ end
 function _M.removeConnection(regId)
 	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
 
-	var_dump(session)
+--	var_dump(session)
 
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
@@ -208,7 +209,7 @@ function _M.receiveData(regId, data)
 		dataObj = cjson.decode(data)
 	end
 
-	ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data decoded. WAMP msg Id: ", dataObj[1])
+	ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
 
 	-- Analyze WAMP message ID received
 	if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
