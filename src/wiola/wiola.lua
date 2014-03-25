@@ -99,7 +99,14 @@ local function redisArr2table(ra)
 	return t
 end
 
+--
 -- Add connection to wiola
+--
+-- sid - nginx session connection ID
+-- wampProto - chosen WAMP protocol
+--
+-- returns WAMP session registration ID, connection data type
+--
 function _M.addConnection(sid, wampProto)
 	local regId = getRegId()
 	local wProto, dataType
@@ -129,7 +136,11 @@ function _M.addConnection(sid, wampProto)
 	return regId, dataType
 end
 
+--
 -- Remove connection from wiola
+--
+-- regId - WAMP session registration ID
+--
 function _M.removeConnection(regId)
 	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
 
@@ -193,7 +204,12 @@ local function publishEvent(sessIds, topic, pubId, args, argsKW)
 	end
 end
 
+--
 -- Receive data from client
+--
+-- regId - WAMP session registration ID
+-- data - data, received through websocket
+--
 function _M.receiveData(regId, data)
 	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
 	session.isWampEstablished = tonumber(session.isWampEstablished)
@@ -393,7 +409,13 @@ function _M.receiveData(regId, data)
 	end
 end
 
+--
 -- Retrieve data, available for session
+--
+-- regId - WAMP session registration ID
+--
+-- returns first WAMP message from the session data queue
+--
 function _M.getPendingData(regId)
 	return redis:lpop("wiSes" .. regId .. "Data")
 end
