@@ -41,7 +41,7 @@ Wiola supports JSON and msgpack serializers.
 Usage example
 =============
 
-For example usage, please see handler.lua file.
+For example usage, please see [handler.lua](src/wiola/handler.lua) file.
 
 [Back to TOC](#table-of-contents)
 
@@ -49,6 +49,7 @@ Installation
 ============
 
 To use wiola you need:
+
 * Nginx
 * lua-nginx-module
 * lua-resty-websocket module
@@ -92,28 +93,64 @@ Methods
 addConnection(sid, wampProto)
 ------------------------------------------
 
-TBD
+Adds new connection instance to wiola control.
+
+Parameters:
+
+ * **sid** - nginx session id
+ * **wampProto** - chosen WAMP subprotocol. It is set in header filter. So just pass here ngx.header["Sec-WebSocket-Protocol"]. It's done just in order not to use shared variables.
+ 
+Returns:
+
+ * **WAMP session ID** (integer)
+ * **Connection data type** (string: 'text' or 'binary')
 
 [Back to TOC](#table-of-contents)
 
 removeConnection(regId)
 ---------------
 
-TBD
+Removes connection from viola control.
+
+Parameters:
+
+ * **regId** - WAMP session ID
+ 
+Returns: nothing
 
 [Back to TOC](#table-of-contents)
 
 receiveData(regId, data)
 ---------------
 
-TBD
+This method should be called, when new data is received from web socket. This method analyze all incoming messages, set states and prepare response data for clients.
+
+Parameters:
+
+ * **regId** - WAMP session ID
+ * **data** - received data
+ 
+Returns: nothing
+
 
 [Back to TOC](#table-of-contents)
 
 getPendingData(regId)
 ---------------------------
 
-TBD
+Checks the store for new data for client.
+
+Parameters:
+
+ * **regId** - WAMP session ID
+ 
+Returns: 
+
+ * **client data** (type depends on session data type) or **null**
+ * **error description** in case of error
+ 
+ This method is actualy a proxy for redis:lpop() method.
+
 
 [Back to TOC](#table-of-contents)
 
