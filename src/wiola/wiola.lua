@@ -25,7 +25,8 @@ local wamp_features = {
 		broker = {
 			features = {
 				subscriber_blackwhite_listing = true,
-				publisher_exclusion = true
+				publisher_exclusion = true,
+				publisher_identification = true
 			}
 		},
 		dealer = {}
@@ -186,7 +187,7 @@ local function putData(session, data)
 end
 
 -- Publish event to sessions
-local function publishEvent(sessIds, topic, pubId, args, argsKW)
+local function publishEvent(sessIds, topic, pubId, details, args, argsKW)
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
@@ -195,11 +196,11 @@ local function publishEvent(sessIds, topic, pubId, args, argsKW)
 		local subId = tonumber(redis:hget("wiSes" .. v .. "Subs", topic))
 
 		if not args and not argsKW then
-			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {} })
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details })
 		elseif args and not argsKW then
-			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {}, args })
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args })
 		else
-			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, {}, args, argsKW })
+			putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW })
 		end
 	end
 end
@@ -320,7 +321,13 @@ function _M.receiveData(regId, data)
 					redis:del(tmpK)
 				end
 
-				publishEvent(ss, dataObj[4], pubId, dataObj[5], dataObj[6])
+				local details = {}
+
+				if dataObj[3].disclose_me and dataObj[3].disclose_me == true then
+					details.publisher = regId
+				end
+
+				publishEvent(ss, dataObj[4], pubId, details, dataObj[5], dataObj[6])
 
 				if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
 					-- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
