@@ -1,6 +1,6 @@
 --
--- Project: this project
--- User: kostik
+-- Project: wiola
+-- User: Konstantin Burkalev
 -- Date: 16.03.14
 --
 local wsServer = require "resty.websocket.server"
