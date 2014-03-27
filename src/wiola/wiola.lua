@@ -14,13 +14,13 @@ if not ok then
 end
 
 local _M = {
-	_VERSION = '0.1'
+	_VERSION = '0.2'
 }
 
 _M.__index = _M
 
 local wamp_features = {
-	agent = "wiola/Lua v0.1",
+	agent = "wiola/Lua v0.2",
 	roles = {
 		broker = {
 			features = {
@@ -66,13 +66,13 @@ local function getRegId()
 	local regId
 	local time = redis:time()
 
---	math.randomseed( os.time() ) -- Precision - only seconds, which doesn't acceptable
+--	math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
 	math.randomseed( time[1] * 1000000 + time[2] )
 
 	repeat
 --		regId = math.random(9007199254740992)
 		regId = math.random(100000000000000)
-	until redis:sismember("wiolaIds",regId)
+	until redis:sismember("wiolaIds", regId)
 
 	return regId
 end
@@ -149,10 +149,6 @@ function _M.removeConnection(regId)
 
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
-	if session.realm then
-		redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
-	end
-
 	local subscriptions = redisArr2table(redis:hgetall("wiSes" .. regId .. "Subs"))
 
 	for k, v in pairs(subscriptions) do
@@ -164,6 +160,19 @@ function _M.removeConnection(regId)
 
 	redis:del("wiSes" .. regId .. "Subs")
 	redis:del("wiSes" .. regId .. "RevSubs")
+
+	local rpcs = redisArr2table(redis:hgetall("wiSes" .. regId .. "RPCs"))
+
+	for k, v in pairs(rpcs) do
+		redis:srem("wiRealm" .. session.realm .. "RPCs",k)
+	end
+
+	redis:del("wiSes" .. regId .. "RPCs")
+	redis:del("wiSes" .. regId .. "RevRPCs")
+
+	redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
+	redis:srem("wiolaRealms",session.realm)
+
 	redis:del("wiSes" .. regId .. "Data")
 	redis:del("wiSes" .. regId)
 	redis:srem("wiolaIds",regId)
@@ -242,9 +251,9 @@ function _M.receiveData(regId, data)
 				session.wampFeatures = cjson.encode(dataObj[3])
 				redis:hmset("wiSes" .. regId, session)
 
-				if not redis:sismember("wiolaRealms",realm) then
+				if redis:sismember("wiolaRealms",realm) == 0 then
 					ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
-					redis:sadd("wiolaIds",regId)
+					redis:sadd("wiolaRealms",realm)
 				end
 
 				redis:sadd("wiRealm" .. realm .. "Sessions", regId)
@@ -342,7 +351,7 @@ function _M.receiveData(regId, data)
 	elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
 		if session.isWampEstablished == 1 then
 			if validateURI(dataObj[4]) then
-				redis:sadd("wiRealm" .. session.realm .. "Subs",dataObj[4])
+				redis:sadd("wiRealm" .. session.realm .. "Subs", dataObj[4])
 
 				if redis:hget("wiSes" .. regId .. "Subs", dataObj[4]) ~= ngx.null then
 					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.already_subscribed" })
@@ -392,13 +401,38 @@ function _M.receiveData(regId, data)
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then   -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
 		if session.isWampEstablished == 1 then
+			if validateURI(dataObj[4]) then
+				if redis:sismember("wiRealm" .. session.realm .. "RPCs", dataObj[4]) == 1 then
+					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], {}, "wamp.error.procedure_already_exists" })
+				else
+					local registrationId = getRegId()
 
+					redis:sadd("wiRealm" .. session.realm .. "RPCs", dataObj[4])
+					redis:hset("wiSes" .. regId .. "RPCs", dataObj[4], registrationId)
+					redis:hset("wiSes" .. regId .. "RevRPCs", registrationId, dataObj[4])
+
+					-- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
+					putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
+				end
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], {}, "wamp.error.invalid_uri" })
+			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC: [UNREGISTER, Request|id, REGISTERED.Registration|id]
 		if session.isWampEstablished == 1 then
+			local rpc = redis:hget("wiSes" .. regId .. "RevRPCs", dataObj[3])
+			if rpc ~= ngx.null then
+				redis:hdel("wiSes" .. regId .. "RPCs", rpc)
+				redis:hdel("wiSes" .. regId .. "RevRPCs", dataObj[3])
+				redis:srem("wiRealm" .. session.realm .. "RPCs",rpc)
 
+				-- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
+				putData(session, { WAMP_MSG_SPEC.UNREGISTERED, dataObj[2] })
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.UNREGISTER, dataObj[2], {}, "wamp.error.no_such_registration" })
+			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
