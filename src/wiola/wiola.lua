@@ -29,7 +29,13 @@ local wamp_features = {
 				publisher_identification = true
 			}
 		},
-		dealer = {}
+		dealer = {
+			features = {
+				callee_blackwhite_listing = true,
+				caller_exclusion = true,
+				caller_identification = true
+			}
+		}
 	}
 }
 
@@ -425,20 +431,54 @@ function _M.receiveData(regId, data)
 					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], {}, "wamp.error.no_such_procedure" })
 				else
 					local callee = tonumber(redis:get("wiRPC" .. dataObj[4]))
-					local calleeSess = redisArr2table(redis:hgetall("wiSes" .. callee))
-					local rpcRegId = redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
-					local invReqId = getRegId()
-					redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
+					local tmpK = "wiSes" .. regId .. "TmpSet"
+					local allOk = false
 
-					if #dataObj == 5 then
-						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
-						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5] })
-					elseif #dataObj == 6 then
-						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
-						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5], dataObj[6] })
+					if dataObj[3].exclude then  -- There is exclude list
+						ngx.log(ngx.DEBUG, "CALL: There is exclude list")
+						local flag = false
+						for k, v in ipairs(dataObj[3].exclude) do
+							if v == callee then
+								flag = true
+								break
+							end
+						end
+
+						if flag == false then
+							allOk = true
+						end
+					elseif dataObj[3].eligible then -- There is eligible list
+						ngx.log(ngx.DEBUG, "CALL: There is eligible list")
+						local flag = false
+						for k, v in ipairs(dataObj[3].eligible) do
+							if v == callee then
+								allOk = true
+								break
+							end
+						end
+					end
+
+					if allOk == true then
+
+						local calleeSess = redisArr2table(redis:hgetall("wiSes" .. callee))
+						local rpcRegId = redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
+						local invReqId = getRegId()
+						redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
+
+						if #dataObj == 5 then
+							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5] })
+						elseif #dataObj == 6 then
+							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5], dataObj[6] })
+						else
+							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {} })
+						end
+
 					else
-						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
-						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {} })
+						-- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
+						putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], {}, "wamp.error.no_suitable_callee" })
 					end
 				end
 			else
