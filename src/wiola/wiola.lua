@@ -284,7 +284,7 @@ function _M.receiveData(regId, data)
 				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list]
 				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
-				local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[2]))
+				local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[3]))
 				local callerSess = redisArr2table(redis:hgetall("wiSes" .. invoc.callerSesId))
 
 				if #dataObj == 6 then
@@ -298,7 +298,7 @@ function _M.receiveData(regId, data)
 					putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, {}, dataObj[5] })
 				end
 
-				redis:del("wiInvoc" .. dataObj[2])
+				redis:del("wiInvoc" .. dataObj[3])
 --			elseif dataObj[2] == WAMP_MSG_SPEC. then
 --
 --			else
