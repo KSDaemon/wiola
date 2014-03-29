@@ -456,6 +456,12 @@ function _M.receiveData(regId, data)
 								break
 							end
 						end
+					elseif dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then    -- Exclude me by default
+						if callee ~= regId then
+							allOk = true
+						end
+					else
+						allOk = true
 					end
 
 					if allOk == true then
