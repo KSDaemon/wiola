@@ -363,7 +363,7 @@ function _M.receiveData(regId, data)
 
 				local details = {}
 
-				if dataObj[3].disclose_me and dataObj[3].disclose_me == true then
+				if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
 					details.publisher = regId
 				end
 
@@ -466,6 +466,12 @@ function _M.receiveData(regId, data)
 
 					if allOk == true then
 
+						local details = {}
+
+						if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
+							details.caller = regId
+						end
+
 						local calleeSess = redisArr2table(redis:hgetall("wiSes" .. callee))
 						local rpcRegId = redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
 						local invReqId = getRegId()
@@ -473,13 +479,13 @@ function _M.receiveData(regId, data)
 
 						if #dataObj == 5 then
 							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
-							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5] })
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5] })
 						elseif #dataObj == 6 then
 							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
-							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5], dataObj[6] })
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5], dataObj[6] })
 						else
 							-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
-							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {} })
+							putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details })
 						end
 
 					else
