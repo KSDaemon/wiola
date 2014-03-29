@@ -165,6 +165,7 @@ function _M.removeConnection(regId)
 
 	for k, v in pairs(rpcs) do
 		redis:srem("wiRealm" .. session.realm .. "RPCs",k)
+		redis:del("wiRPC" .. k)
 	end
 
 	redis:del("wiSes" .. regId .. "RPCs")
@@ -278,7 +279,31 @@ function _M.receiveData(regId, data)
 		-- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
 		-- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
+			if dataObj[2] == WAMP_MSG_SPEC.INVOCATION then
+				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri]
+				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list]
+				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
+				local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[2]))
+				local callerSess = redisArr2table(redis:hgetall("wiSes" .. invoc.callerSesId))
+
+				if #dataObj == 6 then
+					-- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
+					putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, {}, dataObj[5], dataObj[6] })
+				elseif #dataObj == 7 then
+					-- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
+					putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, {}, dataObj[5], dataObj[6], dataObj[7] })
+				else
+					-- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
+					putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, {}, dataObj[5] })
+				end
+
+				redis:del("wiInvoc" .. dataObj[2])
+--			elseif dataObj[2] == WAMP_MSG_SPEC. then
+--
+--			else
+
+			end
 		else
 
 		end
@@ -395,7 +420,30 @@ function _M.receiveData(regId, data)
 		-- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list]
 		-- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
+			if validateURI(dataObj[4]) then
+				if redis:sismember("wiRealm" .. session.realm .. "RPCs", dataObj[4]) == 0 then
+					putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], {}, "wamp.error.no_such_procedure" })
+				else
+					local callee = tonumber(redis:get("wiRPC" .. dataObj[4]))
+					local calleeSess = redisArr2table(redis:hgetall("wiSes" .. callee))
+					local rpcRegId = redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
+					local invReqId = getRegId()
+					redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
 
+					if #dataObj == 5 then
+						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
+						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5] })
+					elseif #dataObj == 6 then
+						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
+						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {}, dataObj[5], dataObj[6] })
+					else
+						-- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
+						putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, {} })
+					end
+				end
+			else
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], {}, "wamp.error.invalid_uri" })
+			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
@@ -408,6 +456,7 @@ function _M.receiveData(regId, data)
 					local registrationId = getRegId()
 
 					redis:sadd("wiRealm" .. session.realm .. "RPCs", dataObj[4])
+					redis:set("wiRPC" .. dataObj[4], regId)
 					redis:hset("wiSes" .. regId .. "RPCs", dataObj[4], registrationId)
 					redis:hset("wiSes" .. regId .. "RevRPCs", registrationId, dataObj[4])
 
@@ -441,7 +490,21 @@ function _M.receiveData(regId, data)
 		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]
 		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
+			local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[2]))
+			local callerSess = redisArr2table(redis:hgetall("wiSes" .. invoc.callerSesId))
 
+			if #dataObj == 4 then
+				-- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
+				putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {}, dataObj[4] })
+			elseif #dataObj == 5 then
+				-- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
+				putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {}, dataObj[4], dataObj[5] })
+			else
+				-- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
+				putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {} })
+			end
+
+			redis:del("wiInvoc" .. dataObj[2])
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
 		end
