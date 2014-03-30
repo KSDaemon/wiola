@@ -32,7 +32,10 @@ wiola supports next WAMP roles and features:
 	* subscriber blackwhite listing
 	* publisher exclusion
 	* publisher identification
-* dealer: basic profile.
+* dealer: advanced profile with features:
+	* callee blackwhite listing
+	* caller exclusion
+	* caller identification
 
 Wiola supports JSON and msgpack serializers.
 
@@ -74,10 +77,10 @@ server {
       lua_socket_log_errors off;
       lua_check_client_abort on;
 
-      # Set a handler for connection
-      content_by_lua_file $document_root/lua/wiola/handler.lua;
       # This is needed to set additional websocket protocol headers
       header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
+      # Set a handler for connection
+      content_by_lua_file $document_root/lua/wiola/handler.lua;
    }
 
 }
@@ -99,7 +102,7 @@ Parameters:
 
  * **sid** - nginx session id
  * **wampProto** - chosen WAMP subprotocol. It is set in header filter. So just pass here ngx.header["Sec-WebSocket-Protocol"]. It's done just in order not to use shared variables.
- 
+
 Returns:
 
  * **WAMP session ID** (integer)
@@ -115,7 +118,7 @@ Removes connection from viola control.
 Parameters:
 
  * **regId** - WAMP session ID
- 
+
 Returns: nothing
 
 [Back to TOC](#table-of-contents)
@@ -129,7 +132,7 @@ Parameters:
 
  * **regId** - WAMP session ID
  * **data** - received data
- 
+
 Returns: nothing
 
 
@@ -143,12 +146,12 @@ Checks the store for new data for client.
 Parameters:
 
  * **regId** - WAMP session ID
- 
-Returns: 
+
+Returns:
 
  * **client data** (type depends on session data type) or **null**
  * **error description** in case of error
- 
+
  This method is actualy a proxy for redis:lpop() method.
 
 
