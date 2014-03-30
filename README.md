@@ -131,7 +131,7 @@ Returns:
 removeConnection(regId)
 ---------------
 
-Removes connection from viola control.
+Removes connection from viola control. Cleans all cached data. Do not neglect this method on connection termination.
 
 Parameters:
 
