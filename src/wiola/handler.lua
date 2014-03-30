@@ -18,6 +18,12 @@ end
 
 ngx.log(ngx.DEBUG, "Created websocket")
 
+local redisOk, redisErr = wampServer.setupRedis("unix:/tmp/redis.sock")
+if not redisOk then
+	ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
+	return ngx.exit(444)
+end
+
 local sessionId, dataType = wampServer.addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
 ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection, " Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 

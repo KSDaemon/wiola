@@ -7,12 +7,6 @@
 local redisLib = require "resty.redis"
 local redis = redisLib:new()
 
-local ok, err = redis:connect("unix:/tmp/redis.sock")
-if not ok then
-	ngx.log(ngx.DEBUG, "Failed to connect to redis: ", err)
-	return
-end
-
 local _M = {
 	_VERSION = '0.2'
 }
@@ -104,6 +98,22 @@ local function redisArr2table(ra)
 	end
 
 	return t
+end
+
+--
+-- Configure Redis connection
+--
+-- host - redis host or unix socket
+-- port - redis port in case of network use or nil
+--
+-- returns connection flag, error description
+--
+function _M.setupRedis(host, port)
+	if port == nil then
+		return redis:connect(host)
+	else
+		return redis:connect(host, port)
+	end
 end
 
 --

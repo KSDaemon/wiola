@@ -12,6 +12,7 @@ Table of Contents
 * [Installation](#installation)
 * [Dependencies](#dependencies)
 * [Methods](#methods)
+	* [setupRedis](#setupredishost-port)
 	* [addConnection](#addconnectionsid-wampproto)
 	* [removeConnection](#removeconnectionregid)
 	* [receiveData](#receivedataregid-data)
@@ -92,6 +93,23 @@ Actually, you do not need to do anything. Just take any WAMP client and make a c
 
 Methods
 ========
+
+setupRedis(host, port)
+------------------------------------------
+
+Configure and initialize connection to Redis server.
+
+Parameters:
+
+ * **host** - Redis server host or Redis unix socket path
+ * **port** - Redis server port (in case of use network connection). Omit for socket connection.
+
+Returns:
+
+ * **Connection flag** (integer)
+ * **Error description** (string) in case of error, nil on success
+
+[Back to TOC](#table-of-contents)
 
 addConnection(sid, wampProto)
 ------------------------------------------
