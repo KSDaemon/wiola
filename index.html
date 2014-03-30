@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <title>Wiola by KSDaemon</title>
+  </head>
+
+  <body>
+    <header>
+      <div class="inner">
+        <h1>Wiola</h1>
+        <h2>WAMP implementation in LUA</h2>
+        <a href="https://github.com/KSDaemon/wiola" class="button"><small>View project on</small>GitHub</a>
+      </div>
+    </header>
+
+    <div id="content-wrapper">
+      <div class="inner clearfix">
+        <section id="main-content">
+          <h1>
+<a name="wiola" class="anchor" href="#wiola"><span class="octicon octicon-link"></span></a>wiola</h1>
+
+<p>WAMP (WebSocket Application Messaging Protocol) implementation on Lua, using the power of LUA Nginx module,
+Lua WebSocket addon, and Redis as cache store.</p>
+
+<h1>
+<a name="table-of-contents" class="anchor" href="#table-of-contents"><span class="octicon octicon-link"></span></a>Table of Contents</h1>
+
+<ul>
+<li><a href="#description">Description</a></li>
+<li><a href="#usage-example">Usage example</a></li>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#dependencies">Dependencies</a></li>
+<li>
+<a href="#methods">Methods</a>
+
+<ul>
+<li><a href="#setupredishost-port">setupRedis</a></li>
+<li><a href="#addconnectionsid-wampproto">addConnection</a></li>
+<li><a href="#removeconnectionregid">removeConnection</a></li>
+<li><a href="#receivedataregid-data">receiveData</a></li>
+<li><a href="#getpendingdataregid">getPendingData</a></li>
+</ul>
+</li>
+<li><a href="#copyright-and-license">Copyright and License</a></li>
+<li><a href="#see-also">See Also</a></li>
+</ul><h1>
+<a name="description" class="anchor" href="#description"><span class="octicon octicon-link"></span></a>Description</h1>
+
+<p>Wiola implements <a href="http://wamp.ws">WAMP</a> v2 router specification on top of OpenResty web app server,
+ which is actually nginx plus a bunch of 3rd party modules, such as lua-nginx-module, lua-resty-websocket,
+ lua-resty-redis, lua cjson and so on.</p>
+
+<p>wiola supports next WAMP roles and features:</p>
+
+<ul>
+<li>broker: advanced profile with features:
+
+<ul>
+<li>subscriber blackwhite listing</li>
+<li>publisher exclusion</li>
+<li>publisher identification</li>
+</ul>
+</li>
+<li>dealer: advanced profile with features:
+
+<ul>
+<li>callee blackwhite listing</li>
+<li>caller exclusion</li>
+<li>caller identification</li>
+</ul>
+</li>
+</ul><p>Wiola supports JSON and msgpack serializers.</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
+<a name="usage-example" class="anchor" href="#usage-example"><span class="octicon octicon-link"></span></a>Usage example</h1>
+
+<p>For example usage, please see <a href="src/wiola/handler.lua">handler.lua</a> file.</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
+<a name="installation" class="anchor" href="#installation"><span class="octicon octicon-link"></span></a>Installation</h1>
+
+<p>To use wiola you need:</p>
+
+<ul>
+<li>Nginx</li>
+<li>lua-nginx-module</li>
+<li>lua-resty-websocket module</li>
+<li>lua-resty-redis module</li>
+<li>luajit</li>
+<li>Lua CJSON library</li>
+<li>
+<a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a> library (optional)</li>
+<li>Redis server</li>
+</ul><p>Instead of compiling lua-* modules into nginx, you can simply use <a href="http://openresty.org">OpenResty</a> server.</p>
+
+<p>Next thing is configuring nginx host. See example below.</p>
+
+<div class="highlight highlight-nginx"><pre><span class="c1"># set search paths for pure Lua external libraries (';;' is the default path):</span>
+<span class="c1"># add paths for wiola and msgpack libs</span>
+<span class="k">lua_package_path</span> <span class="s">'/usr/local/lualib/wiola/?.lua</span><span class="p">;</span><span class="k">/usr/local/lualib/lua-MessagePack/?.lua</span><span class="p">;</span>;<span class="k">'</span><span class="p">;</span>
+
+<span class="c1"># Configure a vhost</span>
+<span class="k">server</span> <span class="p">{</span>
+   <span class="c1"># example location</span>
+   <span class="kn">location</span> <span class="s">/ws/</span> <span class="p">{</span>
+      <span class="kn">lua_socket_log_errors</span> <span class="no">off</span><span class="p">;</span>
+      <span class="kn">lua_check_client_abort</span> <span class="no">on</span><span class="p">;</span>
+
+      <span class="c1"># This is needed to set additional websocket protocol headers</span>
+      <span class="kn">header_filter_by_lua_file</span> <span class="nv">$document_root/lua/wiola/headers.lua</span><span class="p">;</span>
+      <span class="c1"># Set a handler for connection</span>
+      <span class="kn">content_by_lua_file</span> <span class="nv">$document_root/lua/wiola/handler.lua</span><span class="p">;</span>
+   <span class="p">}</span>
+
+<span class="p">}</span>
+</pre></div>
+
+<p>Actually, you do not need to do anything. Just take any WAMP client and make a connection.</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
+<a name="methods" class="anchor" href="#methods"><span class="octicon octicon-link"></span></a>Methods</h1>
+
+<h2>
+<a name="setupredishost-port" class="anchor" href="#setupredishost-port"><span class="octicon octicon-link"></span></a>setupRedis(host, port)</h2>
+
+<p>Configure and initialize connection to Redis server.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>host</strong> - Redis server host or Redis unix socket path</li>
+<li>
+<strong>port</strong> - Redis server port (in case of use network connection). Omit for socket connection.</li>
+</ul><p>Returns:</p>
+
+<ul>
+<li>
+<strong>Connection flag</strong> (integer)</li>
+<li>
+<strong>Error description</strong> (string) in case of error, nil on success</li>
+</ul><p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h2>
+<a name="addconnectionsid-wampproto" class="anchor" href="#addconnectionsid-wampproto"><span class="octicon octicon-link"></span></a>addConnection(sid, wampProto)</h2>
+
+<p>Adds new connection instance to wiola control.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>sid</strong> - nginx session id</li>
+<li>
+<strong>wampProto</strong> - chosen WAMP subprotocol. It is set in header filter. So just pass here ngx.header["Sec-WebSocket-Protocol"]. It's done just in order not to use shared variables.</li>
+</ul><p>Returns:</p>
+
+<ul>
+<li>
+<strong>WAMP session ID</strong> (integer)</li>
+<li>
+<strong>Connection data type</strong> (string: 'text' or 'binary')</li>
+</ul><p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h2>
+<a name="removeconnectionregid" class="anchor" href="#removeconnectionregid"><span class="octicon octicon-link"></span></a>removeConnection(regId)</h2>
+
+<p>Removes connection from viola control. Cleans all cached data. Do not neglect this method on connection termination.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>regId</strong> - WAMP session ID</li>
+</ul><p>Returns: nothing</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h2>
+<a name="receivedataregid-data" class="anchor" href="#receivedataregid-data"><span class="octicon octicon-link"></span></a>receiveData(regId, data)</h2>
+
+<p>This method should be called, when new data is received from web socket. This method analyze all incoming messages, set states and prepare response data for clients.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>regId</strong> - WAMP session ID</li>
+<li>
+<strong>data</strong> - received data</li>
+</ul><p>Returns: nothing</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h2>
+<a name="getpendingdataregid" class="anchor" href="#getpendingdataregid"><span class="octicon octicon-link"></span></a>getPendingData(regId)</h2>
+
+<p>Checks the store for new data for client.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>regId</strong> - WAMP session ID</li>
+</ul><p>Returns:</p>
+
+<ul>
+<li>
+<strong>client data</strong> (type depends on session data type) or <strong>null</strong>
+</li>
+<li>
+<p><strong>error description</strong> in case of error</p>
+
+<p>This method is actualy a proxy for redis:lpop() method.</p>
+</li>
+</ul><p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
+<a name="copyright-and-license" class="anchor" href="#copyright-and-license"><span class="octicon octicon-link"></span></a>Copyright and License</h1>
+
+<p>Wiola library is licensed under the BSD 2-Clause license.</p>
+
+<p>Copyright (c) 2014, Konstantin Burkalev
+All rights reserved.</p>
+
+<p>Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:</p>
+
+<ul>
+<li><p>Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.</p></li>
+<li><p>Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.</p></li>
+</ul><p>THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
+<a name="see-also" class="anchor" href="#see-also"><span class="octicon octicon-link"></span></a>See Also</h1>
+
+<ul>
+<li><a href="http://wamp.ws">WAMP specification</a></li>
+<li>
+<a href="https://github.com/KSDaemon/wampy.js">Wampy.js</a>. WAMP Javascript client-side implementation.</li>
+<li><a href="http://openresty.org">OpenResty</a></li>
+<li><a href="https://github.com/chaoslawful/lua-nginx-module">lua-nginx-module</a></li>
+<li><a href="https://github.com/agentzh/lua-resty-websocket">lua-resty-websocket</a></li>
+<li><a href="https://github.com/agentzh/lua-resty-redis">lua-resty-redis</a></li>
+<li><a href="http://redis.io">Redis key-value store</a></li>
+<li><a href="http://www.kyne.com.au/%7Emark/software/lua-cjson.php">Lua CJSON</a></li>
+<li><a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a></li>
+</ul><p><a href="#table-of-contents">Back to TOC</a></p>
+        </section>
+
+        <aside id="sidebar">
+          <a href="https://github.com/KSDaemon/wiola/zipball/master" class="button">
+            <small>Download</small>
+            .zip file
+          </a>
+          <a href="https://github.com/KSDaemon/wiola/tarball/master" class="button">
+            <small>Download</small>
+            .tar.gz file
+          </a>
+
+          <p class="repo-owner"><a href="https://github.com/KSDaemon/wiola"></a> is maintained by <a href="https://github.com/KSDaemon">KSDaemon</a>.</p>
+
+          <p>This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</p>
+        </aside>
+      </div>
+    </div>
+
+  
+  </body>
+</html>
