@@ -1,0 +1,22 @@
+{
+  "name": "Wiola",
+  "version": "0.2.0",
+  "description": "WAMP implementation in Lua",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/KSDaemon/wiola.git"
+  },
+  "keywords": [
+    "wamp"
+  ],
+  "author": "Konstantin Burkalev",
+  "license": "BSD 2-Clause license",
+  "bugs": {
+    "url": "https://github.com/KSDaemon/wiola/issues"
+  },
+  "homepage": "http://ksdaemon.github.io/wiola/",
+  "devDependencies": {
+    "grunt": "^0.4.4",
+    "grunt-contrib-copy": "^0.5.0"
+  }
+}
