@@ -79,7 +79,8 @@ end
 
 -- Validate uri for WAMP requirements
 local function validateURI(uri)
-	local m, err = ngx.re.match(uri, "^([0-9a-z_]{2,}\\\\.)*([0-9a-z_]{2,})$")
+	local m, err = ngx.re.match(uri, "^([0-9a-z_]{2,}\\.)*([0-9a-z_]{2,})$")
+	ngx.log(ngx.DEBUG, 'validateURI: ', uri, ' ', m == nil, ' ', err)
 	if not m or string.find(uri, 'wamp') == 1 then
 		return false
 	else
@@ -251,6 +252,8 @@ function _M.receiveData(regId, data)
 	else --if session.wamp_protocol == 'wamp.2.json'
 		dataObj = cjson.decode(data)
 	end
+
+--	var_dump(dataObj)
 
 	ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
 
