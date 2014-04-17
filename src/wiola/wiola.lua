@@ -88,19 +88,6 @@ local function validateURI(uri)
 	end
 end
 
--- Convert redis hgetall array to lua table
-local function redisArr2table(ra)
-	local t = {}
-	local i = 1
-
-	while i < #ra do
-		t[ra[i]] = ra[i+1]
-		i = i + 2
-	end
-
-	return t
-end
-
 --
 -- Configure Redis connection
 --
@@ -160,13 +147,13 @@ end
 -- regId - WAMP session registration ID
 --
 function _M.removeConnection(regId)
-	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
+	local session = redis:array_to_hash(redis:hgetall("wiSes" .. regId))
 
 --	var_dump(session)
 
 	ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
-	local subscriptions = redisArr2table(redis:hgetall("wiSes" .. regId .. "Subs"))
+	local subscriptions = redis:array_to_hash(redis:hgetall("wiSes" .. regId .. "Subs"))
 
 	for k, v in pairs(subscriptions) do
 		redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
@@ -178,7 +165,7 @@ function _M.removeConnection(regId)
 	redis:del("wiSes" .. regId .. "Subs")
 	redis:del("wiSes" .. regId .. "RevSubs")
 
-	local rpcs = redisArr2table(redis:hgetall("wiSes" .. regId .. "RPCs"))
+	local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regId .. "RPCs"))
 
 	for k, v in pairs(rpcs) do
 		redis:srem("wiRealm" .. session.realm .. "RPCs",k)
@@ -219,7 +206,7 @@ local function publishEvent(sessIds, topic, pubId, details, args, argsKW)
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
 	for k, v in ipairs(sessIds) do
-		local session = redisArr2table(redis:hgetall("wiSes" .. v))
+		local session = redis:array_to_hash(redis:hgetall("wiSes" .. v))
 		local subId = tonumber(redis:hget("wiSes" .. v .. "Subs", topic))
 
 		if not args and not argsKW then
@@ -239,7 +226,7 @@ end
 -- data - data, received through websocket
 --
 function _M.receiveData(regId, data)
-	local session = redisArr2table(redis:hgetall("wiSes" .. regId))
+	local session = redis:array_to_hash(redis:hgetall("wiSes" .. regId))
 	session.isWampEstablished = tonumber(session.isWampEstablished)
 	local cjson = require "cjson"
 	local dataObj
@@ -303,8 +290,8 @@ function _M.receiveData(regId, data)
 				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list]
 				-- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
-				local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[3]))
-				local callerSess = redisArr2table(redis:hgetall("wiSes" .. invoc.callerSesId))
+				local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. dataObj[3]))
+				local callerSess = redis:array_to_hash(redis:hgetall("wiSes" .. invoc.callerSesId))
 
 				if #dataObj == 6 then
 					-- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -485,7 +472,7 @@ function _M.receiveData(regId, data)
 							details.caller = regId
 						end
 
-						local calleeSess = redisArr2table(redis:hgetall("wiSes" .. callee))
+						local calleeSess = redis:array_to_hash(redis:hgetall("wiSes" .. callee))
 						local rpcRegId = redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
 						local invReqId = getRegId()
 						redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
@@ -555,8 +542,8 @@ function _M.receiveData(regId, data)
 		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]
 		-- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
 		if session.isWampEstablished == 1 then
-			local invoc = redisArr2table(redis:hgetall("wiInvoc" .. dataObj[2]))
-			local callerSess = redisArr2table(redis:hgetall("wiSes" .. invoc.callerSesId))
+			local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. dataObj[2]))
+			local callerSess = redis:array_to_hash(redis:hgetall("wiSes" .. invoc.callerSesId))
 
 			if #dataObj == 4 then
 				-- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
