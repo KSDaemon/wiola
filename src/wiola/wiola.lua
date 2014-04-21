@@ -7,14 +7,16 @@
 local redisLib = require "resty.redis"
 local redis = redisLib:new()
 
+require "debug.var_dump"
+
 local _M = {
-	_VERSION = '0.2'
+	_VERSION = '0.3.1'
 }
 
 _M.__index = _M
 
 local wamp_features = {
-	agent = "wiola/Lua v0.2",
+	agent = "wiola/Lua v0.3.1",
 	roles = {
 		broker = {
 			features = {
@@ -93,15 +95,24 @@ end
 --
 -- host - redis host or unix socket
 -- port - redis port in case of network use or nil
+-- db   - redis database to select
 --
 -- returns connection flag, error description
 --
-function _M.setupRedis(host, port)
+function _M.setupRedis(host, port, db)
+	local redisOk, redisErr
+
 	if port == nil then
-		return redis:connect(host)
+		redisOk, redisErr = redis:connect(host)
 	else
-		return redis:connect(host, port)
+		redisOk, redisErr = redis:connect(host, port)
 	end
+
+	if redisOk and db ~= nil then
+		redis:select(db)
+	end
+
+	return redisOk, redisErr
 end
 
 --
