@@ -206,7 +206,7 @@ local function putData(session, data)
 		dataObj = cjson.encode(data)
 	end
 
-	ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj);
+	ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
 
 	redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
 end
@@ -585,6 +585,49 @@ end
 --
 function _M.getPendingData(regId)
 	return redis:lpop("wiSes" .. regId .. "Data")
+end
+
+--
+-- Process lightweight publish POST data from client
+--
+-- sid - nginx session connection ID
+-- realm - WAMP Realm to operate in
+-- data - data, received through POST
+--
+function _M.processPostData(sid, realm, data)
+
+	ngx.log(ngx.DEBUG, "Received POST data for processing in realm ", realm, ":", data)
+
+	local cjson = require "cjson"
+	local dataObj = cjson.decode(data)
+	local res
+	local httpCode
+
+	if dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
+		local regId, dataType = _M.addConnection(sid, nil)
+
+		-- Make a session legal :)
+		redis:hset("wiSes" .. regId, "isWampEstablished", 1)
+		redis:hset("wiSes" .. regId, "realm", realm)
+
+		_M.receiveData(regId, data)
+
+		local cliData, cliErr = _M.getPendingData(regId)
+		if cliData ~= ngx.null then
+			res = cliData
+			httpCode = ngx.HTTP_FORBIDDEN
+		else
+			res = cjson.encode({ result = true, error = nil })
+			httpCode = ngx.HTTP_OK
+		end
+
+		_M.removeConnection(regId)
+	else
+		res = cjson.encode({ result = false, error = "Message type not supported" })
+		httpCode = ngx.HTTP_FORBIDDEN
+	end
+
+	return res, httpCode
 end
 
 return _M
