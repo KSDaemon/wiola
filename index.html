@@ -51,6 +51,7 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <li><a href="#removeconnectionregid">removeConnection</a></li>
 <li><a href="#receivedataregid-data">receiveData</a></li>
 <li><a href="#getpendingdataregid">getPendingData</a></li>
+<li><a href="#processpostdatasid-realm-data">processPostData</a></li>
 </ul>
 </li>
 <li><a href="#copyright-and-license">Copyright and License</a></li>
@@ -82,6 +83,8 @@ Lua WebSocket addon, and Redis as cache store.</p>
 </ul>
 </li>
 </ul><p>Wiola supports JSON and msgpack serializers.</p>
+
+<p>From v0.3.1 Wiola also supports lightweight POST event publishing. See processPostData method and post-handler.lua for details.</p>
 
 <p><a href="#table-of-contents">Back to TOC</a></p>
 
@@ -117,7 +120,7 @@ Lua WebSocket addon, and Redis as cache store.</p>
 
 <span class="c1"># Configure a vhost</span>
 <span class="k">server</span> <span class="p">{</span>
-   <span class="c1"># example location</span>
+   <span class="c1"># example location for websocket WAMP connection</span>
    <span class="kn">location</span> <span class="s">/ws/</span> <span class="p">{</span>
       <span class="kn">lua_socket_log_errors</span> <span class="no">off</span><span class="p">;</span>
       <span class="kn">lua_check_client_abort</span> <span class="no">on</span><span class="p">;</span>
@@ -126,6 +129,14 @@ Lua WebSocket addon, and Redis as cache store.</p>
       <span class="kn">header_filter_by_lua_file</span> <span class="nv">$document_root/lua/wiola/headers.lua</span><span class="p">;</span>
       <span class="c1"># Set a handler for connection</span>
       <span class="kn">content_by_lua_file</span> <span class="nv">$document_root/lua/wiola/handler.lua</span><span class="p">;</span>
+   <span class="p">}</span>
+
+   <span class="c1"># example location for a lightweight POST event publishing</span>
+   <span class="kn">location</span> <span class="s">/wslight/</span> <span class="p">{</span>
+      <span class="kn">lua_socket_log_errors</span> <span class="no">off</span><span class="p">;</span>
+      <span class="kn">lua_check_client_abort</span> <span class="no">on</span><span class="p">;</span>
+
+      <span class="kn">content_by_lua_file</span> <span class="nv">$document_root/lua/wiola/post-handler.lua</span><span class="p">;</span>
    <span class="p">}</span>
 
 <span class="p">}</span>
@@ -233,6 +244,31 @@ Lua WebSocket addon, and Redis as cache store.</p>
 </li>
 </ul><p><a href="#table-of-contents">Back to TOC</a></p>
 
+<h2>
+<a name="processpostdatasid-realm-data" class="anchor" href="#processpostdatasid-realm-data"><span class="octicon octicon-link"></span></a>processPostData(sid, realm, data)</h2>
+
+<p>Process lightweight POST data from client containing a publish message. This method is intended for fast publishing
+an event, for example, in case when WAMP client is a browser application, which makes some changes on backend server,
+so backend is a right place to notify other WAMP subscribers, but making a full WAMP connection is not optimal.</p>
+
+<p>Parameters:</p>
+
+<ul>
+<li>
+<strong>sid</strong> - nginx session connection ID</li>
+<li>
+<strong>realm</strong> - WAMP Realm to operate in</li>
+<li>
+<strong>data</strong> - data, received through POST (JSON-encoded WAMP publish event)</li>
+</ul><p>Returns:</p>
+
+<ul>
+<li>
+<strong>response data</strong> (JSON encoded WAMP response message in case of error, or { result = true })</li>
+<li>
+<strong>httpCode</strong> HTTP status code (HTTP_OK/200 in case of success, HTTP_FORBIDDEN/403 in case of error)</li>
+</ul><p><a href="#table-of-contents">Back to TOC</a></p>
+
 <h1>
 <a name="copyright-and-license" class="anchor" href="#copyright-and-license"><span class="octicon octicon-link"></span></a>Copyright and License</h1>
 
@@ -297,6 +333,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
       </div>
     </div>
 
-  
+            <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-52132189-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
   </body>
 </html>
