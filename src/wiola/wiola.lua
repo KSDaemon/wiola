@@ -280,7 +280,7 @@ function _M.receiveData(regId, data)
 				putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
 			else
 				-- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
-				putData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_realm" })
+				putData(session, { WAMP_MSG_SPEC.ABORT, {}, "wamp.error.invalid_uri" })
 			end
 		end
 	elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
@@ -385,7 +385,7 @@ function _M.receiveData(regId, data)
 					putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
 				end
 			else
-				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.PUBLISH, dataObj[2], {}, "wamp.error.invalid_topic" })
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.PUBLISH, dataObj[2], {}, "wamp.error.invalid_uri" })
 			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
@@ -407,7 +407,7 @@ function _M.receiveData(regId, data)
 					putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
 				end
 			else
-				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.invalid_topic" })
+				putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.invalid_uri" })
 			end
 		else
 			putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })

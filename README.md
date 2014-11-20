@@ -17,6 +17,7 @@ Table of Contents
 	* [removeConnection](#removeconnectionregid)
 	* [receiveData](#receivedataregid-data)
 	* [getPendingData](#getpendingdataregid)
+	* [processPostData](#processpostdatasid-realm-data)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
 
@@ -39,6 +40,8 @@ wiola supports next WAMP roles and features:
 	* caller identification
 
 Wiola supports JSON and msgpack serializers.
+
+From v0.3.1 Wiola also supports lightweight POST event publishing. See processPostData method and post-handler.lua for details.
 
 [Back to TOC](#table-of-contents)
 
@@ -74,7 +77,7 @@ lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePac
 
 # Configure a vhost
 server {
-   # example location
+   # example location for websocket WAMP connection
    location /ws/ {
       lua_socket_log_errors off;
       lua_check_client_abort on;
@@ -83,6 +86,14 @@ server {
       header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
       # Set a handler for connection
       content_by_lua_file $document_root/lua/wiola/handler.lua;
+   }
+
+   # example location for a lightweight POST event publishing
+   location /wslight/ {
+      lua_socket_log_errors off;
+      lua_check_client_abort on;
+
+      content_by_lua_file $document_root/lua/wiola/post-handler.lua;
    }
 
 }
@@ -131,7 +142,7 @@ Returns:
 [Back to TOC](#table-of-contents)
 
 removeConnection(regId)
----------------
+------------------------------------------
 
 Removes connection from viola control. Cleans all cached data. Do not neglect this method on connection termination.
 
@@ -144,7 +155,7 @@ Returns: nothing
 [Back to TOC](#table-of-contents)
 
 receiveData(regId, data)
----------------
+------------------------------------------
 
 This method should be called, when new data is received from web socket. This method analyze all incoming messages, set states and prepare response data for clients.
 
@@ -155,11 +166,10 @@ Parameters:
 
 Returns: nothing
 
-
 [Back to TOC](#table-of-contents)
 
 getPendingData(regId)
----------------------------
+------------------------------------------
 
 Checks the store for new data for client.
 
@@ -174,6 +184,25 @@ Returns:
 
  This method is actualy a proxy for redis:lpop() method.
 
+[Back to TOC](#table-of-contents)
+
+processPostData(sid, realm, data)
+------------------------------------------
+
+Process lightweight POST data from client containing a publish message. This method is intended for fast publishing
+an event, for example, in case when WAMP client is a browser application, which makes some changes on backend server,
+so backend is a right place to notify other WAMP subscribers, but making a full WAMP connection is not optimal.
+
+Parameters:
+
+ * **sid** - nginx session connection ID
+ * **realm** - WAMP Realm to operate in
+ * **data** - data, received through POST (JSON-encoded WAMP publish event)
+
+Returns:
+
+ * **response data** (JSON encoded WAMP response message in case of error, or { result = true })
+ * **httpCode** HTTP status code (HTTP_OK/200 in case of success, HTTP_FORBIDDEN/403 in case of error)
 
 [Back to TOC](#table-of-contents)
 
