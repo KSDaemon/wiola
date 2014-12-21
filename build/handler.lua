@@ -4,7 +4,8 @@
 -- Date: 16.03.14
 --
 local wsServer = require "resty.websocket.server"
-local wampServer = require "wiola"
+local wiola = require "wiola"
+local wampServer = wiola:new()
 
 local webSocket, err = wsServer:new({
 	timeout = 5000,
@@ -15,19 +16,19 @@ if not webSocket then
 	return ngx.exit(444)
 end
 
-local redisOk, redisErr = wampServer.setupRedis("unix:/tmp/redis.sock")
+local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
 if not redisOk then
 	return ngx.exit(444)
 end
 
-local sessionId, dataType = wampServer.addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
+local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
 
 local cleanExit = false
 
 while true do
 	local data, typ, err = webSocket:recv_frame()
 
-	local cliData, cliErr = wampServer.getPendingData(sessionId)
+	local cliData, cliErr = wampServer:getPendingData(sessionId)
 
 	while cliData ~= ngx.null do
 
@@ -40,11 +41,11 @@ while true do
 		if not bytes then
 		end
 
-		cliData, cliErr = wampServer.getPendingData(sessionId)
+		cliData, cliErr = wampServer:getPendingData(sessionId)
 	end
 
 	if webSocket.fatal then
-		wampServer.removeConnection(sessionId)
+		wampServer:removeConnection(sessionId)
 		return ngx.exit(444)
 	end
 
@@ -52,12 +53,12 @@ while true do
 
 		local bytes, err = webSocket:send_ping()
 		if not bytes then
-			wampServer.removeConnection(sessionId)
+			wampServer:removeConnection(sessionId)
 			return ngx.exit(444)
 		end
 
 	elseif typ == "close" then
-		wampServer.removeConnection(sessionId)
+		wampServer:removeConnection(sessionId)
 		local bytes, err = webSocket:send_close(1000, "Closing connection")
 			if not bytes then
 				return
@@ -69,17 +70,17 @@ while true do
 
 		local bytes, err = webSocket:send_pong()
 		if not bytes then
-			wampServer.removeConnection(sessionId)
+			wampServer:removeConnection(sessionId)
 			return ngx.exit(444)
 		end
 
 	elseif typ == "pong" then
 
 	elseif typ == "text" then -- Received something texty
-		wampServer.receiveData(sessionId, data)
+		wampServer:receiveData(sessionId, data)
 
 	elseif typ == "binary" then -- Received something binary
-		wampServer.receiveData(sessionId, data)
+		wampServer:receiveData(sessionId, data)
 
 	end
 end
@@ -87,5 +88,5 @@ end
 -- Just for clearance
 if not cleanExit then
 	webSocket:send_close()
-	wampServer.removeConnection(sessionId)
+	wampServer:removeConnection(sessionId)
 end
