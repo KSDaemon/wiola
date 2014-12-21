@@ -99,7 +99,7 @@ server {
 }
 ```
 
-Actually, you do not need to do anything. Just take any WAMP client and make a connection.
+Actually, you do not need to do anything else. Just take any WAMP client and make a connection.
 
 [Back to TOC](#table-of-contents)
 

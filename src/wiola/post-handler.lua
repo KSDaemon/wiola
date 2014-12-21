@@ -4,10 +4,11 @@
 -- Date: 20.06.14
 --
 
-local wampServer = require "wiola"
+local wiola = require "wiola"
+local wampServer = wiola:new()
 local realm = "testRealm"
 
-local redisOk, redisErr = wampServer.setupRedis("unix:/tmp/redis.sock")
+local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
 if not redisOk then
 	ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
 	return ngx.exit(444)
