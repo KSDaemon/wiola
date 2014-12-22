@@ -233,7 +233,7 @@ function _M:_publishEvent(sessIds, topic, pubId, details, args, argsKW)
 	-- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
 	for k, v in ipairs(sessIds) do
 		local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
-		local subId = tonumber(_M.redis:hget("wiSes" .. v .. "Subs", topic))
+		local subId = tonumber(self.redis:hget("wiSes" .. v .. "Subs", topic))
 
 		if not args and not argsKW then
 			self:_putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details })
