@@ -31,7 +31,8 @@ local wamp_features = {
             features = {
                 callee_blackwhite_listing = true,
                 caller_exclusion = true,
-                caller_identification = true
+                caller_identification = true,
+                progressive_call_results = true
             }
         }
     }
@@ -498,6 +499,10 @@ function _M:receiveData(regId, data)
                             details.caller = regId
                         end
 
+                        if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
+                            details.receive_progress = true
+                        end
+
                         local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
                         local rpcRegId = self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
                         local invReqId = self:_getRegId()
@@ -571,18 +576,24 @@ function _M:receiveData(regId, data)
             local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. dataObj[2]))
             local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. invoc.callerSesId))
 
-            if #dataObj == 4 then
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {}, dataObj[4] })
-            elseif #dataObj == 5 then
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {}, dataObj[4], dataObj[5] })
+            local details = {}
+
+            if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
+                details.receive_progress = true
             else
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, {} })
+                self.redis:del("wiInvoc" .. dataObj[2])
             end
 
-            self.redis:del("wiInvoc" .. dataObj[2])
+            if #dataObj == 4 then
+                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4] })
+            elseif #dataObj == 5 then
+                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4], dataObj[5] })
+            else
+                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
+            end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, {}, "wamp.error.system_shutdown" })
         end
