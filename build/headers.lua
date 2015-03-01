@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-ngx.header["Server"] = "wiola/Lua v0.3.1"
+ngx.header["Server"] = "wiola/Lua v0.3.2"
 
 local wsProto = ngx.req.get_headers()["Sec-WebSocket-Protocol"]
 

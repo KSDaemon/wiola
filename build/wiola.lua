@@ -5,7 +5,7 @@
 --
 
 local _M = {
-    _VERSION = '0.3.3',
+    _VERSION = '0.3.2',
 }
 
 _M.__index = _M
@@ -16,7 +16,7 @@ setmetatable(_M, {
     end })
 
 local wamp_features = {
-    agent = "wiola/Lua v0.3.3",
+    agent = "wiola/Lua v0.3.2",
     roles = {
         broker = {
             features = {
