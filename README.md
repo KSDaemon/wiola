@@ -12,12 +12,12 @@ Table of Contents
 * [Installation](#installation)
 * [Dependencies](#dependencies)
 * [Methods](#methods)
-	* [setupRedis](#setupredishost-port-db)
-	* [addConnection](#addconnectionsid-wampproto)
-	* [removeConnection](#removeconnectionregid)
-	* [receiveData](#receivedataregid-data)
-	* [getPendingData](#getpendingdataregid)
-	* [processPostData](#processpostdatasid-realm-data)
+    * [setupRedis](#setupredishost-port-db)
+    * [addConnection](#addconnectionsid-wampproto)
+    * [removeConnection](#removeconnectionregid)
+    * [receiveData](#receivedataregid-data)
+    * [getPendingData](#getpendingdataregid)
+    * [processPostData](#processpostdatasid-realm-data)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
 
@@ -31,13 +31,14 @@ Wiola implements [WAMP](http://wamp.ws) v2 router specification on top of OpenRe
 wiola supports next WAMP roles and features:
 
 * broker: advanced profile with features:
-	* subscriber blackwhite listing
-	* publisher exclusion
-	* publisher identification
+    * subscriber blackwhite listing
+    * publisher exclusion
+    * publisher identification
 * dealer: advanced profile with features:
-	* callee blackwhite listing
-	* caller exclusion
-	* caller identification
+    * callee blackwhite listing
+    * caller exclusion
+    * caller identification
+    * progressive call results
 
 Wiola supports JSON and msgpack serializers.
 
