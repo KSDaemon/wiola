@@ -10,8 +10,8 @@ local realm = "testRealm"
 
 local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
 if not redisOk then
-	ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
-	return ngx.exit(444)
+    ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
+    return ngx.exit(444)
 end
 
 ngx.req.read_body()
