@@ -11,19 +11,19 @@ local wsProto = ngx.req.get_headers()["Sec-WebSocket-Protocol"]
 ngx.log(ngx.DEBUG, "Client Sec-WebSocket-Protocol: ", wsProto)
 
 if wsProto then
-	local wsProtos = {}
-	local i = 1
+    local wsProtos = {}
+    local i = 1
 
-	for p in string.gmatch(wsProto, '([^, ]+)') do
-		wsProtos[#wsProtos+1] = p
-	end
+    for p in string.gmatch(wsProto, '([^, ]+)') do
+        wsProtos[#wsProtos+1] = p
+    end
 
-	while i <= #wsProtos do
-		if wsProtos[i] == 'wamp.2.json' or wsProtos[i] == 'wamp.2.msgpack' then
-			ngx.header["Sec-WebSocket-Protocol"] = wsProtos[i]
-			ngx.log(ngx.DEBUG, "Server Sec-WebSocket-Protocol selected: ", wsProtos[i])
-			break
-		end
-		i = i + 1
-	end
+    while i <= #wsProtos do
+        if wsProtos[i] == 'wamp.2.json' or wsProtos[i] == 'wamp.2.msgpack' then
+            ngx.header["Sec-WebSocket-Protocol"] = wsProtos[i]
+            ngx.log(ngx.DEBUG, "Server Sec-WebSocket-Protocol selected: ", wsProtos[i])
+            break
+        end
+        i = i + 1
+    end
 end
