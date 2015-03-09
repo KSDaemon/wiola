@@ -5,7 +5,7 @@
 --
 
 local _M = {
-    _VERSION = '0.3.2',
+    _VERSION = '0.3.3',
 }
 
 _M.__index = _M
@@ -16,7 +16,7 @@ setmetatable(_M, {
     end })
 
 local wamp_features = {
-    agent = "wiola/Lua v0.3.2",
+    agent = "wiola/Lua v0.3.3",
     roles = {
         broker = {
             features = {
@@ -303,6 +303,7 @@ function _M:receiveData(regId, data)
 
                 local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. dataObj[3]))
                 local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. invoc.callerSesId))
+                invoc.CallReqId = tonumber(invoc.CallReqId)
 
                 if #dataObj == 6 then
                     -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -482,7 +483,7 @@ function _M:receiveData(regId, data)
                         end
 
                         local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
-                        local rpcRegId = self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4])
+                        local rpcRegId = tonumber(self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4]))
                         local invReqId = self:_getRegId()
                         self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
 
@@ -552,6 +553,7 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
             local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. dataObj[2]))
+            invoc.CallReqId = tonumber(invoc.CallReqId)
             local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. invoc.callerSesId))
 
             local details = {}
