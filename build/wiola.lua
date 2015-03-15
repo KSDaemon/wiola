@@ -223,6 +223,7 @@ function _M:_publishEvent(sessIds, topic, pubId, details, args, argsKW)
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
+
     for k, v in ipairs(sessIds) do
         local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
         local subId = tonumber(self.redis:hget("wiSes" .. v .. "Subs", topic))
@@ -391,18 +392,16 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
                 self.redis:sadd("wiRealm" .. session.realm .. "Subs", dataObj[4])
-
-                if self.redis:hget("wiSes" .. regId .. "Subs", dataObj[4]) ~= ngx.null then
-                    self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.already_subscribed" })
-                else
-                    local subscriptionId = self:_getRegId()
+                local subscriptionId = tonumber(self.redis:hget("wiSes" .. regId .. "Subs", dataObj[4]))
+                if not subscriptionId then
+                    subscriptionId = self:_getRegId()
                     self.redis:hset("wiSes" .. regId .. "Subs", dataObj[4], subscriptionId)
                     self.redis:hset("wiSes" .. regId .. "RevSubs", subscriptionId, dataObj[4])
                     self.redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions",regId)
-
-                    -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
-                    self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
                 end
+
+                -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
+                self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], {}, "wamp.error.invalid_uri" })
             end
