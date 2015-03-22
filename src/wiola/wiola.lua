@@ -180,17 +180,17 @@ function _M:removeConnection(regId)
 
     ngx.log(ngx.DEBUG, "Removing session: ", regId)
 
-    local subscriptions = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "Subs"))
+    local subscriptions = self.redis:array_to_hash(self.redis:hgetall("wiRealm" .. session.realm .. "Subs"))
+
 
     for k, v in pairs(subscriptions) do
         self.redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
         if self.redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
-            self.redis:srem("wiRealm" .. session.realm .. "Subs",k)
+            self.redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
+            self.redis:hdel("wiRealm" .. session.realm .. "Subs",k)
+            self.redis:hdel("wiRealm" .. session.realm .. "RevSubs",v)
         end
     end
-
-    self.redis:del("wiSes" .. regId .. "Subs")
-    self.redis:del("wiSes" .. regId .. "RevSubs")
 
     local rpcs = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "RPCs"))
 
@@ -203,7 +203,9 @@ function _M:removeConnection(regId)
     self.redis:del("wiSes" .. regId .. "RevRPCs")
 
     self.redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
-    self.redis:srem("wiolaRealms",session.realm)
+    if self.redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
+        self.redis:srem("wiolaRealms",session.realm)
+    end
 
     self.redis:del("wiSes" .. regId .. "Data")
     self.redis:del("wiSes" .. regId)
@@ -218,8 +220,8 @@ function _M:_putData(session, data)
         local mp = require 'MessagePack'
         dataObj = mp.pack(data)
     else --if session.wamp_protocol == 'wamp.2.json'
-        local cjson = require "resty.libcjson"
-        dataObj = cjson.encode(data)
+        local json = require "resty.libcjson"
+        dataObj = json.encode(data)
     end
 
     ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
@@ -228,24 +230,25 @@ function _M:_putData(session, data)
 end
 
 -- Publish event to sessions
-function _M:_publishEvent(sessIds, topic, pubId, details, args, argsKW)
+function _M:_publishEvent(sessIds, subId, pubId, details, args, argsKW)
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
 
     ngx.log(ngx.DEBUG, "Publish events, sessions to notify: ", #sessIds)
 
+    local data
+    if not args and not argsKW then
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details }
+    elseif args and not argsKW then
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args }
+    else
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW }
+    end
+
     for k, v in ipairs(sessIds) do
         local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
-        local subId = tonumber(self.redis:hget("wiSes" .. v .. "Subs", topic))
-
-        if not args and not argsKW then
-            self:_putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details })
-        elseif args and not argsKW then
-            self:_putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args })
-        else
-            self:_putData(session, { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW })
-        end
+        self:_putData(session, data)
     end
 end
 
@@ -258,7 +261,7 @@ end
 function _M:receiveData(regId, data)
     local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
     session.isWampEstablished = tonumber(session.isWampEstablished)
-    local cjson = require "resty.libcjson"
+    local json = require "resty.libcjson"
     local dataObj
 
 --    var_dump(session)
@@ -267,7 +270,7 @@ function _M:receiveData(regId, data)
         local mp = require 'MessagePack'
         dataObj = mp.unpack(data)
     else --if session.wamp_protocol == 'wamp.2.json'
-        dataObj = cjson.decode(data)
+        dataObj = json.decode(data)
     end
 
 --    var_dump(dataObj)
@@ -285,7 +288,7 @@ function _M:receiveData(regId, data)
             if self:_validateURI(realm) then
                 session.isWampEstablished = 1
                 session.realm = realm
-                session.wampFeatures = cjson.encode(dataObj[3])
+                session.wampFeatures = json.encode(dataObj[3])
                 self.redis:hmset("wiSes" .. regId, session)
 
                 if self.redis:sismember("wiolaRealms",realm) == 0 then
@@ -336,13 +339,7 @@ function _M:receiveData(regId, data)
                 end
 
                 self.redis:del("wiInvoc" .. dataObj[3])
---            elseif dataObj[2] == WAMP_MSG_SPEC. then
---
---            else
-
             end
-        else
-
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri]
@@ -398,11 +395,14 @@ function _M:receiveData(regId, data)
                     details.publisher = regId
                 end
 
-                self:_publishEvent(ss, dataObj[4], pubId, details, dataObj[5], dataObj[6])
+                local subId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
+                if subId then
+                    self:_publishEvent(ss, subId, pubId, details, dataObj[5], dataObj[6])
 
-                if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
-                    -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
-                    self:_putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
+                    if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
+                        -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
+                        self:_putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
+                    end
                 end
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.PUBLISH, dataObj[2], setmetatable({}, json.object), "wamp.error.invalid_uri" })
@@ -413,16 +413,16 @@ function _M:receiveData(regId, data)
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then   -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                self.redis:sadd("wiRealm" .. session.realm .. "Subs", dataObj[4])
-                local subscriptionId = tonumber(self.redis:hget("wiSes" .. regId .. "Subs", dataObj[4]))
+                local subscriptionId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
 
-                ngx.log(ngx.DEBUG, "SUBSCRIBE: subscriptionId: ", subscriptionId, " ", not subscriptionId)
                 if not subscriptionId then
                     subscriptionId = self:_getRegId()
-                    self.redis:hset("wiSes" .. regId .. "Subs", dataObj[4], subscriptionId)
-                    self.redis:hset("wiSes" .. regId .. "RevSubs", subscriptionId, dataObj[4])
-                    self.redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions",regId)
+                    self.redis:hset("wiRealm" .. session.realm .. "Subs", dataObj[4], subscriptionId)
+                    self.redis:hset("wiRealm" .. session.realm .. "RevSubs", subscriptionId, dataObj[4])
                 end
+
+                ngx.log(ngx.DEBUG, "SUBSCRIBE: subscriptionId: ", subscriptionId)
+                self.redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions",regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
@@ -434,14 +434,14 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then   -- WAMP SPEC: [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
         if session.isWampEstablished == 1 then
-            local subscr = self.redis:hget("wiSes" .. regId .. "RevSubs", dataObj[3])
-            if subscr ~= ngx.null then
-                self.redis:hdel("wiSes" .. regId .. "Subs", subscr)
-                self.redis:hdel("wiSes" .. regId .. "RevSubs", dataObj[3])
-
+            local subscr = self.redis:hget("wiRealm" .. session.realm .. "RevSubs", dataObj[3])
+            local isSesSubscrbd = self.redis:sismember("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions", regId)
+            if isSesSubscrbd ~= ngx.null then
                 self.redis:srem("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions", regId)
                 if self.redis:scard("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions") == 0 then
-                    self.redis:srem("wiRealm" .. session.realm .. "Subs",subscr)
+                    self.redis:del("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions")
+                    self.redis:hdel("wiRealm" .. session.realm .. "Subs",subscr)
+                    self.redis:hdel("wiRealm" .. session.realm .. "RevSubs",dataObj[3])
                 end
 
                 -- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
@@ -629,8 +629,8 @@ function _M:processPostData(sid, realm, data)
 
     ngx.log(ngx.DEBUG, "Received POST data for processing in realm ", realm, ":", data)
 
-    local cjson = require "resty.libcjson"
-    local dataObj = cjson.decode(data)
+    local json = require "resty.libcjson"
+    local dataObj = json.decode(data)
     local res
     local httpCode
 
@@ -648,13 +648,13 @@ function _M:processPostData(sid, realm, data)
             res = cliData
             httpCode = ngx.HTTP_FORBIDDEN
         else
-            res = cjson.encode({ result = true, error = nil })
+            res = json.encode({ result = true, error = nil })
             httpCode = ngx.HTTP_OK
         end
 
         self.removeConnection(regId)
     else
-        res = cjson.encode({ result = false, error = "Message type not supported" })
+        res = json.encode({ result = false, error = "Message type not supported" })
         httpCode = ngx.HTTP_FORBIDDEN
     end
 
