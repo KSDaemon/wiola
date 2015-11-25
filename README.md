@@ -58,12 +58,12 @@ Installation
 
 To use wiola you need:
 
-* Nginx
+* Nginx or OpenResty
+* [luajit](http://luajit.org/)
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
 * [Redis server](http://redis.io)
-* [luajit](http://luajit.org/)
 * [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
 * [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/) (optional)
 
