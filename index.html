@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
     <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
-    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
     <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
 
     <!--[if lt IE 9]>
@@ -106,22 +106,22 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <p>To use wiola you need:</p>
 
 <ul>
-<li>Nginx</li>
-<li><a href="https://github.com/chaoslawful/lua-nginx-module">lua-nginx-module</a></li>
-<li><a href="https://github.com/agentzh/lua-resty-websocket">lua-resty-websocket module</a></li>
-<li><a href="https://github.com/agentzh/lua-resty-redis">lua-resty-redis module</a></li>
+<li>Nginx or OpenResty</li>
 <li><a href="http://luajit.org/">luajit</a></li>
-<li><a href="https://github.com/bungle/lua-resty-libcjson">lua-resty-libcjson module</a></li>
-<li>
-<a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a> library (optional)</li>
+<li><a href="https://github.com/chaoslawful/lua-nginx-module">lua-nginx-module</a></li>
+<li><a href="https://github.com/agentzh/lua-resty-websocket">lua-resty-websocket</a></li>
+<li><a href="https://github.com/agentzh/lua-resty-redis">lua-resty-redis</a></li>
 <li><a href="http://redis.io">Redis server</a></li>
+<li><a href="https://github.com/bungle/lua-resty-libcjson">lua-resty-libcjson</a></li>
+<li>
+<a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a> (optional)</li>
 </ul>
 
 <p>Instead of compiling lua-* modules into nginx, you can simply use <a href="http://openresty.org">OpenResty</a> server.</p>
 
 <p>Next thing is configuring nginx host. See example below.</p>
 
-<div class="highlight highlight-nginx"><pre><span class="pl-c"># set search paths for pure Lua external libraries (';;' is the default path):</span>
+<div class="highlight highlight-source-nginx"><pre><span class="pl-c"># set search paths for pure Lua external libraries (';;' is the default path):</span>
 <span class="pl-c"># add paths for wiola and msgpack libs</span>
 <span class="pl-k">lua_package_path</span> <span class="pl-s">'/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;'</span>;
 
