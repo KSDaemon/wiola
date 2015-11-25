@@ -59,13 +59,13 @@ Installation
 To use wiola you need:
 
 * Nginx
-* lua-nginx-module
-* lua-resty-websocket module
-* lua-resty-redis module
+* [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
+* [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
+* [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
+* [Redis key-value store](http://redis.io)
 * luajit
-* Lua CJSON library
-* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/) library (optional)
-* Redis server
+* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
+* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty](http://openresty.org) server.
 
@@ -248,7 +248,7 @@ See Also
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
 * [Redis key-value store](http://redis.io)
-* [Lua CJSON](http://www.kyne.com.au/~mark/software/lua-cjson.php)
+* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
 * [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
 
 [Back to TOC](#table-of-contents)
