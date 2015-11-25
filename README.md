@@ -26,7 +26,7 @@ Description
 
 Wiola implements [WAMP](http://wamp.ws) v2 router specification on top of OpenResty web app server,
  which is actually nginx plus a bunch of 3rd party modules, such as lua-nginx-module, lua-resty-websocket,
- lua-resty-redis, lua cjson and so on.
+ lua-resty-redis, lua-resty-libcjson and so on.
 
 wiola supports next WAMP roles and features:
 
@@ -62,10 +62,10 @@ To use wiola you need:
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
-* [Redis key-value store](http://redis.io)
-* luajit
+* [Redis server](http://redis.io)
+* [luajit](http://luajit.org/)
 * [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
-* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
+* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/) (optional)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty](http://openresty.org) server.
 
@@ -246,9 +246,9 @@ See Also
 * [OpenResty](http://openresty.org)
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
+* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
 * [Redis key-value store](http://redis.io)
-* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
 * [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
 
 [Back to TOC](#table-of-contents)
