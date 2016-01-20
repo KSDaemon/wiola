@@ -64,7 +64,7 @@ To use wiola you need:
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
 * [Redis server](http://redis.io)
-* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
+* [lua-rapidjson](https://github.com/xpol/lua-rapidjson)
 * [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/) (optional)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty](http://openresty.org) server.
@@ -247,6 +247,7 @@ See Also
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
 * [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
+* [lua-rapidjson](https://github.com/xpol/lua-rapidjson)
 * [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
 * [Redis key-value store](http://redis.io)
 * [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
