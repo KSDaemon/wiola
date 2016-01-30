@@ -94,7 +94,7 @@ end
 
 -- Validate uri for WAMP requirements
 function _M:_validateURI(uri)
-    local m, err = ngx.re.match(uri, "^([0-9a-z_]{2,}\\.)*([0-9a-z_]{2,})$")
+    local m, err = ngx.re.match(uri, "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$")
     ngx.log(ngx.DEBUG, '_validateURI: ', uri, ' ', m == nil, ' ', err)
     if not m or string.find(uri, 'wamp') == 1 then
         return false
