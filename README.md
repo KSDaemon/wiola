@@ -69,6 +69,9 @@ To use wiola you need:
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty](http://openresty.org) server.
 
+In any case, for your convenience, you can install Wiola through [luarocks](http://luarocks.org/modules/ksdaemon/wiola)
+by `luarocks install wiola`.
+
 Next thing is configuring nginx host. See example below.
 
 ```nginx
