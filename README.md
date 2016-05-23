@@ -148,7 +148,7 @@ Returns:
 removeConnection(regId)
 ------------------------------------------
 
-Removes connection from viola control. Cleans all cached data. Do not neglect this method on connection termination.
+Removes connection from wiola control. Cleans all cached data. Do not neglect this method on connection termination.
 
 Parameters:
 
@@ -245,7 +245,7 @@ See Also
 ========
 
 * [WAMP specification](http://wamp.ws)
-* [Wampy.js](https://github.com/KSDaemon/wampy.js). WAMP Javascript client-side implementation.
+* [Wampy.js](https://github.com/KSDaemon/wampy.js). WAMP Javascript client implementation.
 * [OpenResty](http://openresty.org)
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
 * [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
