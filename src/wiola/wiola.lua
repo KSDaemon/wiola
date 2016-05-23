@@ -38,6 +38,13 @@ local wamp_features = {
     }
 }
 
+-- Redis connection configuration
+local redisConf = {
+    host = "unix:/tmp/redis.sock",
+    port = nil,
+    db = nil
+}
+
 local WAMP_MSG_SPEC = {
     HELLO = 1,
     WELCOME = 2,
@@ -103,28 +110,53 @@ function _M:_validateURI(uri)
 end
 
 --
--- Configure Redis connection
+-- Configure Wiola
 --
--- host - redis host or unix socket
--- port - redis port in case of network use or nil
--- db   - redis database to select
+-- config - Configuration table with possible options:
+--          {
+--              redis = {
+--                  host = string - redis host or unix socket,
+--                  port = number - redis port in case of network use,
+--                  db = number - redis database to select
+--              }
+--          }
+--
+function _M:configure(config)
+    if config.redis then
+
+        if config.redis.host ~= nil then
+            redisConf.host = config.redis.host
+        end
+
+        if config.redis.port ~= nil then
+            redisConf.port = config.redis.port
+        end
+
+        if config.redis.db ~= nil then
+            redisConf.db = config.redis.db
+        end
+    end
+end
+
+--
+-- Setup Redis connection
 --
 -- returns connection flag, error description
 --
-function _M:setupRedis(host, port, db)
+function _M:setupRedis()
     local redisOk, redisErr
 
     local redisLib = require "resty.redis"
     self.redis = redisLib:new()
 
-    if port == nil then
-        redisOk, redisErr = self.redis:connect(host)
+    if redisConf.port == nil then
+        redisOk, redisErr = self.redis:connect(redisConf.host)
     else
-        redisOk, redisErr = self.redis:connect(host, port)
+        redisOk, redisErr = self.redis:connect(redisConf.host, redisConf.port)
     end
 
-    if redisOk and db ~= nil then
-        self.redis:select(db)
+    if redisOk and redisConf.db ~= nil then
+        self.redis:select(redisConf.db)
     end
 
     return redisOk, redisErr

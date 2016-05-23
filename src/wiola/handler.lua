@@ -19,7 +19,7 @@ end
 
 ngx.log(ngx.DEBUG, "Created websocket")
 
-local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
+local redisOk, redisErr = wampServer:setupRedis()
 if not redisOk then
     ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
     return ngx.exit(444)
