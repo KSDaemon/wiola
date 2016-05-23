@@ -45,7 +45,6 @@ local WAMP_MSG_SPEC = {
     CHALLENGE = 4,
     AUTHENTICATE = 5,
     GOODBYE = 6,
-    HEARTBEAT = 7,
     ERROR = 8,
     PUBLISH = 16,
     PUBLISHED = 17,
@@ -583,8 +582,8 @@ function _M:receiveData(regId, data)
 
             local details = setmetatable({}, { __jsontype = 'object' })
 
-            if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
-                details.receive_progress = true
+            if dataObj[3].progress ~= nil and dataObj[3].progress == true then
+                details.progress = true
             else
                 self.redis:del("wiInvoc" .. dataObj[2])
             end
