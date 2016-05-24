@@ -500,14 +500,16 @@ function _M:receiveData(regId, data)
                     -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
                     self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_suitable_callee" })
                 else
-                    local callee = tonumber(self.redis:get("wiRPC" .. dataObj[4]))
+                    local regInfo = self.redis:array_to_hash(self.redis:hgetall("wiRPC" .. dataObj[4]))
+                    local callee = tonumber(regInfo.calleeSesId)
                     local tmpK = "wiSes" .. regId .. "TmpSet"
 
                     local details = setmetatable({}, { __jsontype = 'object' })
 
                     if wiolaConf.callerIdentification == "always" or
                        (wiolaConf.callerIdentification == "auto" and
-                       (dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true)) then
+                       ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
+                        (regInfo.disclose_caller == true))) then
                         details.caller = regId
                     end
 
@@ -569,7 +571,10 @@ function _M:receiveData(regId, data)
                     local registrationId = self:_getRegId()
 
                     self.redis:sadd("wiRealm" .. session.realm .. "RPCs", dataObj[4])
-                    self.redis:set("wiRPC" .. dataObj[4], regId)
+                    self.redis:hmset("wiRPC" .. dataObj[4], "calleeSesId", regId)
+                    if dataObj[3].disclose_caller ~= nil and dataObj[3].disclose_caller == true then
+                        self.redis:hmset("wiRPC" .. dataObj[4], "disclose_caller", true)
+                    end
                     self.redis:hset("wiSes" .. regId .. "RPCs", dataObj[4], registrationId)
                     self.redis:hset("wiSes" .. regId .. "RevRPCs", registrationId, dataObj[4])
 
@@ -588,6 +593,7 @@ function _M:receiveData(regId, data)
             if rpc ~= ngx.null then
                 self.redis:hdel("wiSes" .. regId .. "RPCs", rpc)
                 self.redis:hdel("wiSes" .. regId .. "RevRPCs", dataObj[3])
+                self.redis:del("wiRPC" .. rpc)
                 self.redis:srem("wiRealm" .. session.realm .. "RPCs",rpc)
 
                 -- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
