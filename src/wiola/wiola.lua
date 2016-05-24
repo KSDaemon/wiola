@@ -631,6 +631,10 @@ function _M:receiveData(regId, data)
             if calleeSess.wampFeatures.callee.features.call_canceling == true then
                 local details = setmetatable({}, { __jsontype = 'object' })
 
+                if dataObj[3].mode ~= nil then
+                    details.mode = dataObj[3].mode
+                end
+
                 -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
                 self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, wiCall.wiInvocId, details })
             end
