@@ -31,7 +31,8 @@ local wamp_features = {
             features = {
                 caller_identification = true,
                 progressive_call_results = true,
-                call_canceling = true
+                call_canceling = true,
+                call_timeout = true
             }
         }
     }
@@ -508,7 +509,30 @@ function _M:receiveData(regId, data)
                     local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
                     local rpcRegId = tonumber(self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4]))
                     local invReqId = self:_getRegId()
+
+                    if dataObj[3].timeout ~= nil and
+                       dataObj[3].timeout > 0 and
+                       calleeSess.wampFeatures.callee.features.call_timeout == true and
+                       calleeSess.wampFeatures.callee.features.call_canceling == true then
+
+                        -- Caller specified Timeout for CALL processing and callee support this feature
+                        local function callCancel(premature, calleeSess, invReqId)
+
+                            local details = setmetatable({}, { __jsontype = 'object' })
+
+                            -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
+                            self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, invReqId, details })
+                        end
+
+                        local ok, err = ngx.timer.at(dataObj[3].timeout, callCancel, calleeSess, invReqId)
+
+                        if not ok then
+                            ngx.log(ngx.ERR, "failed to create timer: ", err)
+                        end
+                    end
+
                     self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
+                    self.redis:hmset("wiCall" .. dataObj[2], "callerSesId", session.sessId, "calleeSesId", calleeSess.sessId, "wiInvocId", invReqId)
 
                     if #dataObj == 5 then
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
@@ -580,6 +604,7 @@ function _M:receiveData(regId, data)
                 details.progress = true
             else
                 self.redis:del("wiInvoc" .. dataObj[2])
+                self.redis:del("wiCall" .. invoc.CallReqId)
             end
 
             if #dataObj == 4 then
@@ -591,6 +616,23 @@ function _M:receiveData(regId, data)
             else
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
                 self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
+            end
+        else
+            self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+        end
+    elseif dataObj[1] == WAMP_MSG_SPEC.CANCEL then
+        -- WAMP SPEC: [CANCEL, CALL.Request|id, Options|dict]
+        if session.isWampEstablished == 1 then
+
+            local wiCall = self.redis:array_to_hash(self.redis:hgetall("wiCall" .. dataObj[2]))
+            wiCall.calleeSesId = tonumber(wiCall.calleeSesId)
+            local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. wiCall.calleeSesId))
+
+            if calleeSess.wampFeatures.callee.features.call_canceling == true then
+                local details = setmetatable({}, { __jsontype = 'object' })
+
+                -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
+                self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, wiCall.wiInvocId, details })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
