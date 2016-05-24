@@ -12,7 +12,8 @@ Table of Contents
 * [Installation](#installation)
 * [Dependencies](#dependencies)
 * [Methods](#methods)
-    * [setupRedis](#setupredishost-port-db)
+    * [configure](#configureconfig)
+    * [setupRedis](#setupredis)
     * [addConnection](#addconnectionsid-wampproto)
     * [removeConnection](#removeconnectionregid)
     * [receiveData](#receivedataregid-data)
@@ -110,16 +111,27 @@ Actually, you do not need to do anything else. Just take any WAMP client and mak
 Methods
 ========
 
-setupRedis(host, port, db)
+configure(config)
 ------------------------------------------
 
-Configure and initialize connection to Redis server.
+Configure Wiola Instance.
 
 Parameters:
 
- * **host** - Redis server host or Redis unix socket path
- * **port** - Redis server port (in case of use network connection). Omit for socket connection.
- * **db** - Redis database index to select
+ * **config** - Configuration table with possible options:
+    * **redis** - Redis connection configuration table:
+        * **host** - Redis server host or Redis unix socket path
+        * **port** - Redis server port (in case of use network connection). Omit for socket connection.
+        * **db** - Redis database index to select
+
+Returns: nothing
+
+[Back to TOC](#table-of-contents)
+
+setupRedis()
+------------------------------------------
+
+Initialize connection to Redis server.
 
 Returns:
 
