@@ -29,10 +29,9 @@ local wamp_features = {
         },
         dealer = {
             features = {
-                callee_blackwhite_listing = true,
-                caller_exclusion = true,
                 caller_identification = true,
-                progressive_call_results = true
+                progressive_call_results = true,
+                call_canceling = true
             }
         }
     }
@@ -490,73 +489,36 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
                 if self.redis:sismember("wiRealm" .. session.realm .. "RPCs", dataObj[4]) == 0 then
-                    self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_such_procedure" })
+                    -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
+                    self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_suitable_callee" })
                 else
                     local callee = tonumber(self.redis:get("wiRPC" .. dataObj[4]))
                     local tmpK = "wiSes" .. regId .. "TmpSet"
-                    local allOk = false
 
-                    if dataObj[3].exclude then  -- There is exclude list
-                        ngx.log(ngx.DEBUG, "CALL: There is exclude list")
-                        local flag = false
-                        for k, v in ipairs(dataObj[3].exclude) do
-                            if v == callee then
-                                flag = true
-                                break
-                            end
-                        end
+                    local details = setmetatable({}, { __jsontype = 'object' })
 
-                        if flag == false then
-                            allOk = true
-                        end
-                    elseif dataObj[3].eligible then -- There is eligible list
-                        ngx.log(ngx.DEBUG, "CALL: There is eligible list")
-                        local flag = false
-                        for k, v in ipairs(dataObj[3].eligible) do
-                            if v == callee then
-                                allOk = true
-                                break
-                            end
-                        end
-                    elseif dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then    -- Exclude me by default
-                        if callee ~= regId then
-                            allOk = true
-                        end
-                    else
-                        allOk = true
+                    if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
+                        details.caller = regId
                     end
 
-                    if allOk == true then
+                    if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
+                        details.receive_progress = true
+                    end
 
-                        local details = setmetatable({}, { __jsontype = 'object' })
+                    local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
+                    local rpcRegId = tonumber(self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4]))
+                    local invReqId = self:_getRegId()
+                    self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
 
-                        if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
-                            details.caller = regId
-                        end
-
-                        if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
-                            details.receive_progress = true
-                        end
-
-                        local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
-                        local rpcRegId = tonumber(self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4]))
-                        local invReqId = self:_getRegId()
-                        self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
-
-                        if #dataObj == 5 then
-                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
-                            self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5] })
-                        elseif #dataObj == 6 then
-                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
-                            self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5], dataObj[6] })
-                        else
-                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
-                            self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details })
-                        end
-
+                    if #dataObj == 5 then
+                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5] })
+                    elseif #dataObj == 6 then
+                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5], dataObj[6] })
                     else
-                        -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
-                        self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], {}, "wamp.error.no_suitable_callee" })
+                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details })
                     end
                 end
             else
