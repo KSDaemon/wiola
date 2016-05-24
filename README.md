@@ -114,15 +114,16 @@ Methods
 configure(config)
 ------------------------------------------
 
-Configure Wiola Instance.
+Configure Wiola Instance. All options are optional. Some options has default value, or are nils if not specified.
 
 Parameters:
 
  * **config** - Configuration table with possible options:
     * **redis** - Redis connection configuration table:
-        * **host** - Redis server host or Redis unix socket path
-        * **port** - Redis server port (in case of use network connection). Omit for socket connection.
+        * **host** - Redis server host or Redis unix socket path. Default: "unix:/tmp/redis.sock"
+        * **port** - Redis server port (in case of use network connection). Omit for socket connection
         * **db** - Redis database index to select
+    * **callerIdentification** - Disclose caller identification? Possible values: auto | never | always. Default: "auto"
 
 Returns: nothing
 

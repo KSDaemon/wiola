@@ -45,6 +45,11 @@ local redisConf = {
     db = nil
 }
 
+-- Wiola Runtime configuration
+local wiolaConf = {
+    callerIdentification = "auto"   -- auto | never | always
+}
+
 local WAMP_MSG_SPEC = {
     HELLO = 1,
     WELCOME = 2,
@@ -115,10 +120,12 @@ end
 -- config - Configuration table with possible options:
 --          {
 --              redis = {
---                  host = string - redis host or unix socket,
---                  port = number - redis port in case of network use,
---                  db = number - redis database to select
---              }
+--                  host = string - redis host or unix socket (default: "unix:/tmp/redis.sock"),
+--                  port = number - redis port in case of network use (default: nil),
+--                  db = number - redis database to select (default: nil)
+--              },
+--              callerIdentification = string - Disclose caller identification?
+--                                              Possible values: auto | never | always. (default: "auto")
 --          }
 --
 function _M:configure(config)
@@ -498,7 +505,9 @@ function _M:receiveData(regId, data)
 
                     local details = setmetatable({}, { __jsontype = 'object' })
 
-                    if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
+                    if wiolaConf.callerIdentification == "always" or
+                       (wiolaConf.callerIdentification == "auto" and
+                       (dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true)) then
                         details.caller = regId
                     end
 
