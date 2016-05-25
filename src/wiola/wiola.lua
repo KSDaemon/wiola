@@ -387,45 +387,107 @@ function _M:receiveData(regId, data)
             if self:_validateURI(dataObj[4]) then
                 local pubId = self:_getRegId()
                 local ss = {}
-                local tmpK = "wiSes" .. regId .. "TmpSet"
+                local tmpK = "wiSes" .. regId .. "TmpSetK"
+                local tmpL = "wiSes" .. regId .. "TmpSetL"
 
-                if dataObj[3].exclude then  -- There is exclude list
-                    ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
-                    for k, v in ipairs(dataObj[3].exclude) do
-                        self.redis:sadd(tmpK, v)
-                    end
+                self.redis:sdiffstore(tmpK, "wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
 
-                    if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
-                        self.redis:sadd(tmpK, regId)
-                    end
-
-                    ss = self.redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
-                    self.redis:del(tmpK)
-                elseif dataObj[3].eligible then -- There is eligible list
+                if dataObj[3].eligible then -- There is eligible list
                     ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
                     for k, v in ipairs(dataObj[3].eligible) do
-                        self.redis:sadd(tmpK, v)
+                        self.redis:sadd(tmpL, v)
                     end
 
-                    self.redis:sinterstore("wiSes" .. regId .. "TmpSetInter", "wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
-
-                    self.redis:del(tmpK)
-                    if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
-                        self.redis:sadd(tmpK, regId)
-                    end
-
-                    ss = self.redis:sdiff("wiSes" .. regId .. "TmpSetInter", tmpK)
-                    self.redis:del(tmpK)
-                    self.redis:del("wiSes" .. regId .. "TmpSetInter")
-                elseif dataObj[3].exclude_me ~= nil and dataObj[3].exclude_me == false then    -- Do not exclude me
-                    ngx.log(ngx.DEBUG, "PUBLISH: Do not exclude me: ", dataObj[3].exclude_me, dataObj[3].exclude_me == false);
-                    ss = self.redis:smembers("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
-                else -- Usual behaviour
-                    ngx.log(ngx.DEBUG, "PUBLISH: Usual behaviour")
-                    self.redis:sadd(tmpK, regId)
-                    ss = self.redis:sdiff("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", tmpK)
-                    self.redis:del(tmpK)
+                    self.redis:sinterstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
                 end
+
+                if dataObj[3].eligible_authid then -- There is eligible authid list
+                    ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authid list")
+
+                    for k, v in ipairs(self.redis:smembers(tmpK)) do
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+
+                        for i=1, #dataObj[3].eligible_authid do
+                            if s.wampFeatures.authid == dataObj[3].eligible_authid[i] then
+                                self.redis:sadd(tmpL, s.sessId)
+                            end
+                        end
+                    end
+
+                    self.redis:sinterstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                if dataObj[3].eligible_authrole then -- There is eligible authrole list
+                    ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authrole list")
+
+                    for k, v in ipairs(self.redis:smembers(tmpK)) do
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+
+                        for i=1, #dataObj[3].eligible_authrole do
+                            if s.wampFeatures.authrole == dataObj[3].eligible_authrole[i] then
+                                self.redis:sadd(tmpL, s.sessId)
+                            end
+                        end
+                    end
+
+                    self.redis:sinterstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                if dataObj[3].exclude then -- There is exclude list
+                    ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
+                    for k, v in ipairs(dataObj[3].exclude) do
+                        self.redis:sadd(tmpL, v)
+                    end
+
+                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                if dataObj[3].exclude_authid then -- There is exclude authid list
+                    ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authid list")
+
+                    for k, v in ipairs(self.redis:smembers(tmpK)) do
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+
+                        for i=1, #dataObj[3].exclude_authid do
+                            if s.wampFeatures.authid == dataObj[3].exclude_authid[i] then
+                                self.redis:sadd(tmpL, s.sessId)
+                            end
+                        end
+                    end
+
+                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                if dataObj[3].exclude_authrole then -- There is exclude authrole list
+                    ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authrole list")
+
+                    for k, v in ipairs(self.redis:smembers(tmpK)) do
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+
+                        for i=1, #dataObj[3].exclude_authrole do
+                            if s.wampFeatures.authrole == dataObj[3].exclude_authrole[i] then
+                                self.redis:sadd(tmpL, s.sessId)
+                            end
+                        end
+                    end
+
+                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
+                    self.redis:sadd(tmpL, regId)
+                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
+                    self.redis:del(tmpL)
+                end
+
+                ss = self.redis:smembers(tmpK)
+                self.redis:del(tmpK)
 
                 local details = {}
 
