@@ -124,6 +124,23 @@ Parameters:
         * **port** - Redis server port (in case of use network connection). Omit for socket connection
         * **db** - Redis database index to select
     * **callerIdentification** - Disclose caller identification? Possible values: auto | never | always. Default: "auto"
+    * **cookieAuth** - Cookie-based Authentication configuration table:
+        * **authType** - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use
+        * **cookieName** - Name of cookie with auth info. Default: "wampauth"
+        * **staticCredentials** - Array-like table with string items, allowed to connect. Is used with authType="static"
+        * **authCallback** - Callback function for authentication. Is used with authType="dynamic". Value of cookieName
+         is passed as first parameter. Should return boolean flag, true - allows connection, false - prevent connection
+    * **wampCRA** - WAMP Challenge-Response ("WAMP-CRA") authentication configuration table:
+        * **authType** - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use
+        * **staticCredentials** - Array-like table with items { authid = "user1", authrole = "userRole1", secret="secret1" },
+        allowed to connect. Is used with authType="static"
+        * **challengeCallback** - Callback function for generating challenge info. Is used with authType="dynamic".
+        Is called on HELLO message, passing authid as first parameter. Should return challenge string the client needs
+        to create a signature for. Check [Challenge Response Authentication section in WAMP Specification][] for more info.
+        * **authCallback** - Callback function for checking auth signature. Is used with authType="dynamic".
+        Is called on AUTHENTICATE message, passing signature as first parameter.
+        Should return auth info object { authid="user1", authrole="userRole", authmethod="wampcra", authprovider="usersProvider" }
+        or nil | false in case of failure.
 
 Returns: nothing
 
@@ -257,7 +274,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 See Also
 ========
 
-* [WAMP specification](http://wamp.ws)
+* [WAMP specification](http://wamp-proto.org/)
+* [Challenge Response Authentication section in WAMP Specification](https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3)
 * [Wampy.js](https://github.com/KSDaemon/wampy.js). WAMP Javascript client implementation.
 * [OpenResty](http://openresty.org)
 * [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)

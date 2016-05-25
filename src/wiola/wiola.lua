@@ -47,7 +47,24 @@ local redisConf = {
 
 -- Wiola Runtime configuration
 local wiolaConf = {
-    callerIdentification = "auto"   -- auto | never | always
+    callerIdentification = "auto",   -- auto | never | always
+    cookieAuth = {
+        authType = "none",          -- none | static | dynamic
+        cookieName = "wampauth",
+        staticCredentials = nil, --{
+            -- "user1", "user2:password2", "secretkey3"
+        --},
+        authCallback = nil
+    },
+    wampCRA = {
+        authType = "none",          -- none | static | dynamic
+        staticCredentials = nil, --{
+            -- { authid = "user1", authrole = "userRole1", secret="secret1" },
+            -- { authid = "user2", authrole = "userRole2", secret="secret2" }
+        --},
+        challengeCallback = nil,
+        authCallback = nil
+    }
 }
 
 local WAMP_MSG_SPEC = {
@@ -146,6 +163,40 @@ function _M:configure(config)
 
     if config.callerIdentification ~= nil then
         wiolaConf.callerIdentification = config.callerIdentification
+    end
+
+    if config.cookieAuth then
+
+        if config.cookieAuth.authType ~= nil then
+            wiolaConf.cookieAuth.authType = config.cookieAuth.authType
+        end
+
+        if config.cookieAuth.cookieName ~= nil then
+            wiolaConf.cookieAuth.cookieName = config.cookieAuth.cookieName
+        end
+
+        if config.cookieAuth.staticCredentials ~= nil then
+            wiolaConf.cookieAuth.staticCredentials = config.cookieAuth.staticCredentials
+        end
+
+        if config.cookieAuth.authCallback ~= nil then
+            wiolaConf.cookieAuth.authCallback = config.cookieAuth.authCallback
+        end
+    end
+
+    if config.wampCRA then
+
+        if config.wampCRA.authType ~= nil then
+            wiolaConf.wampCRA.authType = config.wampCRA.authType
+        end
+
+        if config.wampCRA.staticCredentials ~= nil then
+            wiolaConf.wampCRA.staticCredentials = config.wampCRA.staticCredentials
+        end
+
+        if config.wampCRA.authCallback ~= nil then
+            wiolaConf.wampCRA.authCallback = config.wampCRA.authCallback
+        end
     end
 end
 
