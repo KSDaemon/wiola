@@ -143,6 +143,10 @@ function _M:configure(config)
             redisConf.db = config.redis.db
         end
     end
+
+    if config.callerIdentification ~= nil then
+        wiolaConf.callerIdentification = config.callerIdentification
+    end
 end
 
 --
