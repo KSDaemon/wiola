@@ -282,7 +282,7 @@ See Also
 * [lua-resty-websocket][]
 * [lua-rapidjson][]
 * [lua-resty-redis][]
-* [Redis key-value store][]
+* [Redis server][]
 * [lua-MessagePack][]
 
 [Back to TOC](#table-of-contents)
@@ -297,5 +297,5 @@ See Also
 [lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
 [lua-rapidjson]: https://github.com/xpol/lua-rapidjson
 [lua-resty-redis]: https://github.com/agentzh/lua-resty-redis
-[Redis key-value store]: http://redis.io
+[Redis server]: http://redis.io
 [lua-MessagePack]: http://fperrad.github.io/lua-MessagePack/
