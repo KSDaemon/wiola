@@ -25,7 +25,7 @@ Table of Contents
 Description
 ===========
 
-Wiola implements [WAMP](http://wamp.ws) v2 router specification on top of OpenResty web app server,
+Wiola implements [WAMP specification][] v2 router specification on top of OpenResty web app server,
  which is actually nginx plus a bunch of 3rd party modules, such as lua-nginx-module, lua-resty-websocket,
  lua-resty-redis, lua-resty-libcjson and so on.
 
@@ -60,15 +60,15 @@ Installation
 To use wiola you need:
 
 * Nginx or OpenResty
-* [luajit](http://luajit.org/)
-* [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
-* [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
-* [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
-* [Redis server](http://redis.io)
-* [lua-rapidjson](https://github.com/xpol/lua-rapidjson)
-* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/) (optional)
+* [luajit][]
+* [lua-nginx-module][]
+* [lua-resty-websocket][]
+* [lua-resty-redis][]
+* [Redis server][]
+* [lua-rapidjson][]
+* [lua-MessagePack][] (optional)
 
-Instead of compiling lua-* modules into nginx, you can simply use [OpenResty](http://openresty.org) server.
+Instead of compiling lua-* modules into nginx, you can simply use [OpenResty][] server.
 
 In any case, for your convenience, you can install Wiola through [luarocks](http://luarocks.org/modules/ksdaemon/wiola)
 by `luarocks install wiola`.
@@ -114,7 +114,7 @@ Methods
 configure(config)
 ------------------------------------------
 
-Configure Wiola Instance. All options are optional. Some options has default value, or are nils if not specified.
+Configure Wiola Instance. All options are optional. Some options have default value, or are nils if not specified.
 
 Parameters:
 
@@ -274,16 +274,28 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 See Also
 ========
 
-* [WAMP specification](http://wamp-proto.org/)
-* [Challenge Response Authentication section in WAMP Specification](https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3)
-* [Wampy.js](https://github.com/KSDaemon/wampy.js). WAMP Javascript client implementation.
-* [OpenResty](http://openresty.org)
-* [lua-nginx-module](https://github.com/chaoslawful/lua-nginx-module)
-* [lua-resty-websocket](https://github.com/agentzh/lua-resty-websocket)
-* [lua-resty-libcjson](https://github.com/bungle/lua-resty-libcjson)
-* [lua-rapidjson](https://github.com/xpol/lua-rapidjson)
-* [lua-resty-redis](https://github.com/agentzh/lua-resty-redis)
-* [Redis key-value store](http://redis.io)
-* [lua-MessagePack](http://fperrad.github.io/lua-MessagePack/)
+* [WAMP specification][]
+* [Challenge Response Authentication section in WAMP Specification][]
+* [Wampy.js][]. WAMP Javascript client implementation
+* [OpenResty][]
+* [lua-nginx-module][]
+* [lua-resty-websocket][]
+* [lua-rapidjson][]
+* [lua-resty-redis][]
+* [Redis key-value store][]
+* [lua-MessagePack][]
 
 [Back to TOC](#table-of-contents)
+
+
+[WAMP specification]: http://wamp-proto.org/
+[Challenge Response Authentication section in WAMP Specification]: https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3
+[Wampy.js]: https://github.com/KSDaemon/wampy.js
+[OpenResty]: http://openresty.org
+[luajit]: http://luajit.org/
+[lua-nginx-module]: https://github.com/chaoslawful/lua-nginx-module
+[lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
+[lua-rapidjson]: https://github.com/xpol/lua-rapidjson
+[lua-resty-redis]: https://github.com/agentzh/lua-resty-redis
+[Redis key-value store]: http://redis.io
+[lua-MessagePack]: http://fperrad.github.io/lua-MessagePack/
