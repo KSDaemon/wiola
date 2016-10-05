@@ -22,7 +22,6 @@ if not redisOk then
 end
 
 local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
-    " Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
 local cleanExit = false
 
