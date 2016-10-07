@@ -16,7 +16,7 @@ if not webSocket then
     return ngx.exit(444)
 end
 
-local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
+local redisOk, redisErr = wampServer:setupRedis()
 if not redisOk then
     return ngx.exit(444)
 end

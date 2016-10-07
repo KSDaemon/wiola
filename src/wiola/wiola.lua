@@ -7,7 +7,7 @@
 require "debug.var_dump"
 
 local _M = {
-    _VERSION = '0.5.1',
+    _VERSION = '0.5.2',
 }
 
 _M.__index = _M
@@ -18,7 +18,7 @@ setmetatable(_M, {
     end })
 
 local wamp_features = {
-    agent = "wiola/Lua v0.5.1",
+    agent = "wiola/Lua v0.5.2",
     roles = {
         broker = {
             features = {
