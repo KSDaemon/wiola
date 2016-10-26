@@ -84,6 +84,9 @@ lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePac
 server {
    # example location for websocket WAMP connection
    location /ws/ {
+      set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
+      set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
+
       lua_socket_log_errors off;
       lua_check_client_abort on;
 

@@ -8,8 +8,8 @@ local wiola = require "wiola"
 local wampServer = wiola:new()
 
 local webSocket, err = wsServer:new({
-    timeout = 5000,
-    max_payload_len = 65535
+    timeout = tonumber(ngx.var.wiola_socket_timeout, 10) or 100,
+    max_payload_len = tonumber(ngx.var.wiola_max_payload_len, 10) or 65535
 })
 
 if not webSocket then
@@ -32,8 +32,9 @@ ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header
 local cleanExit = false
 
 while true do
-    local data, typ, err = webSocket:recv_frame()
+    ngx.log(ngx.DEBUG, "Started handler loop!")
 
+    ngx.log(ngx.DEBUG, "Checking data for client...")
     local cliData, cliErr = wampServer:getPendingData(sessionId)
 
     while cliData ~= ngx.null do
@@ -57,6 +58,8 @@ while true do
         wampServer:removeConnection(sessionId)
         return ngx.exit(444)
     end
+
+    local data, typ, err = webSocket:recv_frame()
 
     if not data then
 
@@ -103,6 +106,8 @@ while true do
         wampServer:receiveData(sessionId, data)
 
     end
+
+    ngx.log(ngx.DEBUG, "Finished handler loop!")
 end
 
 -- Just for clearance

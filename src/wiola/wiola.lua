@@ -320,6 +320,7 @@ function _M:_putData(session, data)
     ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
 
     self.redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
+    ngx.log(ngx.DEBUG, "Pushed data for client into redis")
 end
 
 -- Publish event to sessions
@@ -776,6 +777,9 @@ function _M:receiveData(regId, data)
     else
 
     end
+
+
+    ngx.log(ngx.DEBUG, "Exiting receiveData()")
 end
 
 --
