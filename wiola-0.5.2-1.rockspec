@@ -22,6 +22,7 @@ description = {
 dependencies = {
     "lua >= 5.1",
     "luarestyredis",
+    "lua-resty-cookie",
     "rapidjson >= 0.3",
     "lua-messagepack >= 0.3"
 }
