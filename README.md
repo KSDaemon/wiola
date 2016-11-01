@@ -64,6 +64,7 @@ To use wiola you need:
 * [lua-nginx-module][]
 * [lua-resty-websocket][]
 * [lua-resty-redis][]
+* [lua-resty-cookie][]
 * [Redis server][]
 * [lua-rapidjson][]
 * [lua-MessagePack][] (optional)
@@ -87,10 +88,6 @@ server {
       set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
       set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
       
-      set $wiola_redis_host "unix:/tmp/redis.sock"; # Optional parameter. Can be hostname/ip or socket path
-      #set $wiola_redis_port 6379;                  # Optional parameter. Should be set when using hostname/ip
-      #set $wiola_redis_db 25;                      # Optional parameter. Redis db to use
-
       lua_socket_log_errors off;
       lua_check_client_abort on;
 
@@ -304,6 +301,7 @@ See Also
 [luajit]: http://luajit.org/
 [lua-nginx-module]: https://github.com/chaoslawful/lua-nginx-module
 [lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
+[lua-resty-cookie]: https://github.com/cloudflare/lua-resty-cookie
 [lua-rapidjson]: https://github.com/xpol/lua-rapidjson
 [lua-resty-redis]: https://github.com/agentzh/lua-resty-redis
 [Redis server]: http://redis.io

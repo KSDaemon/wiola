@@ -38,34 +38,7 @@ local wamp_features = {
     }
 }
 
--- Redis connection configuration
-local redisConf = {
-    host = ngx.var.wiola_redis_host or "unix:/tmp/redis.sock",
-    port = ngx.var.wiola_redis_port,
-    db = ngx.var.wiola_redis_db
-}
-
--- Wiola Runtime configuration
-local wiolaConf = {
-    callerIdentification = "auto",   -- auto | never | always
-    cookieAuth = {
-        authType = "none",          -- none | static | dynamic
-        cookieName = "wampauth",
-        staticCredentials = nil, --{
-            -- "user1", "user2:password2", "secretkey3"
-        --},
-        authCallback = nil
-    },
-    wampCRA = {
-        authType = "none",          -- none | static | dynamic
-        staticCredentials = nil, --{
-            -- { authid = "user1", authrole = "userRole1", secret="secret1" },
-            -- { authid = "user2", authrole = "userRole2", secret="secret2" }
-        --},
-        challengeCallback = nil,
-        authCallback = nil
-    }
-}
+local wiola_config = require "wiola.config"
 
 local WAMP_MSG_SPEC = {
     HELLO = 1,
@@ -134,78 +107,10 @@ end
 --
 -- Get or set Wiola Runtime configuration
 --
--- config - Configuration table with possible options:
---          {
---              redis = {
---                  host = string - redis host or unix socket (default: "unix:/tmp/redis.sock"),
---                  port = number - redis port in case of network use (default: nil),
---                  db = number - redis database to select (default: nil)
---              },
---              callerIdentification = string - Disclose caller identification?
---                                              Possible values: auto | never | always. (default: "auto")
---          }
--- without params it just returns current configuration
+-- see wiola/config.lua:config() for specification
 --
-function _M.config(config)
-
-    if not config then
-        local conf = wiolaConf
-        conf.redis = redisConf
-        return conf
-    end
-
-    if config.redis then
-
-        if config.redis.host ~= nil then
-            redisConf.host = config.redis.host
-        end
-
-        if config.redis.port ~= nil then
-            redisConf.port = config.redis.port
-        end
-
-        if config.redis.db ~= nil then
-            redisConf.db = config.redis.db
-        end
-    end
-
-    if config.callerIdentification ~= nil then
-        wiolaConf.callerIdentification = config.callerIdentification
-    end
-
-    if config.cookieAuth then
-
-        if config.cookieAuth.authType ~= nil then
-            wiolaConf.cookieAuth.authType = config.cookieAuth.authType
-        end
-
-        if config.cookieAuth.cookieName ~= nil then
-            wiolaConf.cookieAuth.cookieName = config.cookieAuth.cookieName
-        end
-
-        if config.cookieAuth.staticCredentials ~= nil then
-            wiolaConf.cookieAuth.staticCredentials = config.cookieAuth.staticCredentials
-        end
-
-        if config.cookieAuth.authCallback ~= nil then
-            wiolaConf.cookieAuth.authCallback = config.cookieAuth.authCallback
-        end
-    end
-
-    if config.wampCRA then
-
-        if config.wampCRA.authType ~= nil then
-            wiolaConf.wampCRA.authType = config.wampCRA.authType
-        end
-
-        if config.wampCRA.staticCredentials ~= nil then
-            wiolaConf.wampCRA.staticCredentials = config.wampCRA.staticCredentials
-        end
-
-        if config.wampCRA.authCallback ~= nil then
-            wiolaConf.wampCRA.authCallback = config.wampCRA.authCallback
-        end
-    end
+function _M:config(config)
+    return wiola_config.config(config)
 end
 
 --
@@ -219,14 +124,16 @@ function _M:setupRedis()
     local redisLib = require "resty.redis"
     self.redis = redisLib:new()
 
-    if redisConf.port == nil then
-        redisOk, redisErr = self.redis:connect(redisConf.host)
+    local conf = self:config()
+
+    if conf.redis.port == nil then
+        redisOk, redisErr = self.redis:connect(conf.redis.host)
     else
-        redisOk, redisErr = self.redis:connect(redisConf.host, redisConf.port)
+        redisOk, redisErr = self.redis:connect(conf.redis.host, conf.redis.port)
     end
 
-    if redisOk and redisConf.db ~= nil then
-        self.redis:select(redisConf.db)
+    if redisOk and conf.redis.db ~= nil then
+        self.redis:select(conf.redis.db)
     end
 
     return redisOk, redisErr
@@ -632,8 +539,9 @@ function _M:receiveData(regId, data)
 
                     local details = setmetatable({}, { __jsontype = 'object' })
 
-                    if wiolaConf.callerIdentification == "always" or
-                       (wiolaConf.callerIdentification == "auto" and
+                    local conf = self:config()
+                    if conf.callerIdentification == "always" or
+                       (conf.callerIdentification == "auto" and
                        ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
                         (regInfo.disclose_caller == true))) then
                         details.caller = regId
