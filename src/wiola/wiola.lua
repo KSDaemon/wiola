@@ -40,9 +40,9 @@ local wamp_features = {
 
 -- Redis connection configuration
 local redisConf = {
-    host = "unix:/tmp/redis.sock",
-    port = nil,
-    db = nil
+    host = ngx.var.wiola_redis_host or "unix:/tmp/redis.sock",
+    port = ngx.var.wiola_redis_port,
+    db = ngx.var.wiola_redis_db
 }
 
 -- Wiola Runtime configuration

@@ -86,6 +86,10 @@ server {
    location /ws/ {
       set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
       set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
+      
+      set $wiola_redis_host "unix:/tmp/redis.sock"; # Optional parameter. Can be hostname/ip or socket path
+      #set $wiola_redis_port 6379;                  # Optional parameter. Should be set when using hostname/ip
+      #set $wiola_redis_db 25;                      # Optional parameter. Redis db to use
 
       lua_socket_log_errors off;
       lua_check_client_abort on;
