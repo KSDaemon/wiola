@@ -118,10 +118,11 @@ Actually, you do not need to do anything else. Just take any WAMP client and mak
 Methods
 ========
 
-configure(config)
+config(config)
 ------------------------------------------
 
-Configure Wiola Instance. All options are optional. Some options have default value, or are nils if not specified.
+Configure Wiola Instance or retrieve current configuration. All options are optional. Some options have default value, 
+or are nils if not specified.
 
 Parameters:
 
@@ -149,7 +150,8 @@ Parameters:
         Should return auth info object { authid="user1", authrole="userRole", authmethod="wampcra", authprovider="usersProvider" }
         or nil | false in case of failure.
 
-Returns: nothing
+When called without parameters, returns current configuration.
+When setting configuration, returns nothing.
 
 [Back to TOC](#table-of-contents)
 

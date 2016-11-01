@@ -132,7 +132,7 @@ function _M:_validateURI(uri)
 end
 
 --
--- Configure Wiola
+-- Get or set Wiola Runtime configuration
 --
 -- config - Configuration table with possible options:
 --          {
@@ -144,8 +144,16 @@ end
 --              callerIdentification = string - Disclose caller identification?
 --                                              Possible values: auto | never | always. (default: "auto")
 --          }
+-- without params it just returns current configuration
 --
-function _M:configure(config)
+function _M.config(config)
+
+    if not config then
+        local conf = wiolaConf
+        conf.redis = redisConf
+        return conf
+    end
+
     if config.redis then
 
         if config.redis.host ~= nil then
