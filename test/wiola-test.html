@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebXP</title>
+    <script src="wampy.js"></script>
+    <script>
+        let logs;
+
+        function logger (data) {
+            let li = document.createElement('LI');
+            li.innerHTML = data;
+            logs.appendChild(li);
+        }
+
+        /**
+         * Установка куки
+         * @param {string} name Название куки
+         * @param value Значение куки
+         * @param {object} options Опции
+         */
+        function setCookie (name, value, options = {}) {
+            let expires = options.expires;
+
+            if (typeof expires == 'number' && expires) {
+                let d = new Date();
+                d.setTime(d.getTime() + expires * 1000);
+                expires = options.expires = d;
+            }
+
+            if (expires && expires.toUTCString) {
+                options.expires = expires.toUTCString();
+            }
+
+            value = encodeURIComponent(value);
+
+            let updatedCookie = name + '=' + value;
+
+            for (let propName in options) {
+                updatedCookie += '; ' + propName;
+                let propValue = options[propName];
+
+                if (propValue !== true) {
+                    updatedCookie += '=' + propValue;
+                }
+            }
+
+            document.cookie = updatedCookie;
+        }
+
+        function init() {
+
+            logs = document.getElementById('log');
+
+            setCookie('wampauth', 'user1:pass1');
+
+            let ws, d = Date.now();
+
+            logger('0: Initializing wampy and connecting to server...');
+
+            ws = new Wampy('ws://webxp/ws/', {
+                realm: 'test',
+                onConnect: function () {
+                    logger('+' + (Date.now() - d) + 'ms: Yahoo! We are online!');
+                    ws.subscribe('message.received', {
+                       onSuccess: function () {
+                           logger('+' + (Date.now() - d) + 'ms: Successfully subscribed to topic');
+                           ws.publish('message.received', ['New message'], null, { exclude_me: false });
+                       },
+                       onError: function (err, details) { logger('+' + (Date.now() - d) + 'ms: Subscription error:' + err); },
+                       onEvent: function (arrayPayload, objectPayload) {
+                           logger('+' + (Date.now() - d) + 'ms: Received new message!');
+                           logger('+' + (Date.now() - d) + 'ms: Closing connection...');
+                           ws.disconnect();
+                       }
+                    });
+
+                },
+                onClose: function () {
+                    logger('+' + (Date.now() - d) + 'ms: Connection to WAMP server closed!');
+                },
+                onError: function () { logger('Breakdown happened'); },
+                onReconnect: function () { logger('Reconnecting...'); },
+                onReconnectSuccess: function () { logger('Reconnection succeeded...'); }
+            });
+
+
+        }
+
+    </script>
+</head>
+<body onload="init();">
+<ul id="log">
+
+</ul>
+</body>
+</html>
