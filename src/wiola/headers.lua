@@ -21,20 +21,16 @@ local conf = wiola_config:config()
 
 if conf.cookieAuth.authType ~= "none" then
 
-    local ck = require "resty.cookie"
-    local cookie, err = ck:new()
+    ngx.log(ngx.DEBUG, "Checking credentials. Auth type set to ", conf.cookieAuth.authType)
 
-    if not cookie then
-        ngx.log(ngx.ERR, err)
-        return ngx.exit(ngx.HTTP_SERVICE_UNAVAILABLE)
-    end
+    local cookieValue = ngx.unescape_uri(ngx.var["cookie_" .. conf.cookieAuth.cookieName])
 
-    local cookieValue, err = cookie:get(conf.cookieAuth.cookieName)
-
-    if not cookieName then
+    if not cookieValue then
         ngx.log(ngx.ERR, err)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
+
+    ngx.log(ngx.DEBUG, "Client cookie ", conf.cookieAuth.cookieName, " is set to ", cookieValue)
 
     if conf.cookieAuth.authType == "static" then
 
@@ -50,6 +46,8 @@ if conf.cookieAuth.authType ~= "none" then
             return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
     end
+
+    ngx.log(ngx.DEBUG, "Successfully authorized client using cookie!")
 end
 
 local wsProto = ngx.req.get_headers()["Sec-WebSocket-Protocol"]

@@ -64,7 +64,6 @@ To use wiola you need:
 * [lua-nginx-module][]
 * [lua-resty-websocket][]
 * [lua-resty-redis][]
-* [lua-resty-cookie][]
 * [Redis server][]
 * [lua-rapidjson][]
 * [lua-MessagePack][] (optional)
@@ -301,7 +300,6 @@ See Also
 [luajit]: http://luajit.org/
 [lua-nginx-module]: https://github.com/chaoslawful/lua-nginx-module
 [lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
-[lua-resty-cookie]: https://github.com/cloudflare/lua-resty-cookie
 [lua-rapidjson]: https://github.com/xpol/lua-rapidjson
 [lua-resty-redis]: https://github.com/agentzh/lua-resty-redis
 [Redis server]: http://redis.io
