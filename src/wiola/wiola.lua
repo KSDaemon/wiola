@@ -209,6 +209,8 @@ end
 function _M:removeConnection(regId)
     local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
 
+    session.realm = session.realm or ""
+
 --    var_dump(session)
 
     ngx.log(ngx.DEBUG, "Removing session: ", regId)
@@ -325,7 +327,7 @@ function _M:receiveData(regId, data)
                 local config = self:config()
                 if config.wampCRA.authType ~= "none" then
 
-                    if has(dataObj[3].authmethods, "wampcra") and dataObj[3].authid then
+                    if dataObj[3].authmethods and has(dataObj[3].authmethods, "wampcra") and dataObj[3].authid then
 
                         local challenge, challengeString, signature
 
