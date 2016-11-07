@@ -26,8 +26,8 @@ local wiolaConf = {
     wampCRA = {
         authType = "none",          -- none | static | dynamic
         staticCredentials = nil, --{
-            -- { authid = "user1", authrole = "userRole1", secret="secret1" },
-            -- { authid = "user2", authrole = "userRole2", secret="secret2" }
+            -- user1 = { authrole = "userRole1", secret="secret1" },
+            -- user2 = { authrole = "userRole2", secret="secret2" }
         --},
         challengeCallback = nil,
         authCallback = nil
@@ -105,6 +105,10 @@ function _M:config(config)
 
         if config.wampCRA.staticCredentials ~= nil then
             wiolaConf.wampCRA.staticCredentials = config.wampCRA.staticCredentials
+        end
+
+        if config.wampCRA.challengeCallback ~= nil then
+            wiolaConf.wampCRA.challengeCallback = config.wampCRA.challengeCallback
         end
 
         if config.wampCRA.authCallback ~= nil then

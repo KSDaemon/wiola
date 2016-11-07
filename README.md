@@ -136,13 +136,14 @@ Parameters:
          is passed as first parameter. Should return boolean flag, true - allows connection, false - prevent connection
     * **wampCRA** - WAMP Challenge-Response ("WAMP-CRA") authentication configuration table:
         * **authType** - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use
-        * **staticCredentials** - Array-like table with items { authid = "user1", authrole = "userRole1", secret="secret1" },
+        * **staticCredentials** - table with keys, named as authids and values like { authrole = "userRole1", secret="secret1" },
         allowed to connect. Is used with authType="static"
         * **challengeCallback** - Callback function for generating challenge info. Is used with authType="dynamic".
-        Is called on HELLO message, passing authid as first parameter. Should return challenge string the client needs
-        to create a signature for. Check [Challenge Response Authentication section in WAMP Specification][] for more info.
+        Is called on HELLO message, passing session ID as first parameter and authid as second one. 
+        Should return challenge string the client needs to create a signature for. 
+        Check [Challenge Response Authentication section in WAMP Specification][] for more info.
         * **authCallback** - Callback function for checking auth signature. Is used with authType="dynamic".
-        Is called on AUTHENTICATE message, passing signature as first parameter.
+        Is called on AUTHENTICATE message, passing session ID as first parameter and signature as second one.
         Should return auth info object { authid="user1", authrole="userRole", authmethod="wampcra", authprovider="usersProvider" }
         or nil | false in case of failure.
 

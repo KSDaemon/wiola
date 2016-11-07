@@ -67,6 +67,17 @@ local WAMP_MSG_SPEC = {
     YIELD = 70
 }
 
+-- Check for a value in table
+local has = function(tab, val)
+    for index, value in ipairs (tab) do
+        if value == val then
+            return true
+        end
+    end
+
+    return false
+end
+
 --
 -- Create a new instance
 --
@@ -93,10 +104,24 @@ function _M:_getRegId()
     return regId
 end
 
+-- Generate a random string
+function _M:_randomString(length)
+    local str = "";
+    local time = self.redis:time()
+
+--    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
+    math.randomseed( time[1] * 1000000 + time[2] )
+
+    for i = 1, length do
+        str = str .. string.char(math.random(32, 126));
+    end
+    return str;
+end
+
 -- Validate uri for WAMP requirements
 function _M:_validateURI(uri)
     local m, err = ngx.re.match(uri, "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$")
-    ngx.log(ngx.DEBUG, '_validateURI: ', uri, ' ', m == nil, ' ', err)
+    ngx.log(ngx.DEBUG, 'Validating URI: ', uri, '. Found match? ', m == nil, ', error: ', err)
     if not m or string.find(uri, 'wamp') == 1 then
         return false
     else
@@ -209,6 +234,7 @@ function _M:removeConnection(regId)
 
     self.redis:del("wiSes" .. regId .. "RPCs")
     self.redis:del("wiSes" .. regId .. "RevRPCs")
+    self.redis:del("wiSes" .. regId .. "Challenge")
 
     self.redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
     if self.redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
@@ -295,25 +321,148 @@ function _M:receiveData(regId, data)
         else
             local realm = dataObj[2]
             if self:_validateURI(realm) then
-                session.isWampEstablished = 1
-                session.realm = realm
-                session.wampFeatures = json.encode(dataObj[3])
-                self.redis:hmset("wiSes" .. regId, session)
 
-                if self.redis:sismember("wiolaRealms",realm) == 0 then
-                    ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
-                    self.redis:sadd("wiolaRealms",realm)
+                local config = self:config()
+                if config.wampCRA.authType ~= "none" then
+
+                    if has(dataObj[3].authmethods, "wampcra") and dataObj[3].authid then
+
+                        local challenge, challengeString, signature
+
+                        self.redis:hmset("wiSes" .. regId .. "Challenge", "realm", realm)
+                        self.redis:hmset("wiSes" .. regId .. "Challenge", "wampFeatures", json.encode(dataObj[3]))
+
+                        if config.wampCRA.authType == "static" then
+
+                            if config.wampCRA.staticCredentials[dataObj[3].authid] then
+
+                                challenge = {
+                                    authid = dataObj[3].authid,
+                                    authrole = config.wampCRA.staticCredentials[dataObj[3].authid].authrole,
+                                    authmethod = "wampcra",
+                                    authprovider = "wiolaStaticAuth",
+                                    nonce = self:_randomString(16),
+                                    timestamp = os.date("!%FT%TZ"), -- without ms. "!%FT%T.%LZ"
+                                    session = regId
+                                }
+
+                                challengeString = json.encode(challenge)
+
+                                local hmac = require "resty.hmac"
+                                local hm, err = hmac:new(config.wampCRA.staticCredentials[dataObj[3].authid].secret)
+
+                                signature, err = hm:generate_signature("sha256", challengeString)
+
+                                if signature then
+
+                                    self.redis:hmset("wiSes" .. regId .. "Challenge", challenge)
+                                    self.redis:hmset("wiSes" .. regId .. "Challenge", "signature", signature)
+
+                                    -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
+                                    self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challengeString } })
+
+                                else
+                                    -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                                    self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                                end
+                            else
+                                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                                self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                            end
+
+                        elseif config.wampCRA.authType == "dynamic" then
+
+                            challenge = config.wampCRA.challengeCallback(regId, dataObj[3].authid)
+
+                            -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
+                            self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challenge } })
+                        end
+                    else
+                        -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                        self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                    end
+                else
+
+                    session.isWampEstablished = 1
+                    session.realm = realm
+                    session.wampFeatures = json.encode(dataObj[3])
+                    self.redis:hmset("wiSes" .. regId, session)
+
+                    if self.redis:sismember("wiolaRealms",realm) == 0 then
+                        ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
+                        self.redis:sadd("wiolaRealms",realm)
+                    end
+
+                    self.redis:sadd("wiRealm" .. realm .. "Sessions", regId)
+
+                    -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+                    self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+
                 end
-
-                self.redis:sadd("wiRealm" .. realm .. "Sessions", regId)
-
-                -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
-                self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
             else
                 -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
                 self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.invalid_uri" })
             end
         end
+    elseif dataObj[1] == WAMP_MSG_SPEC.AUTHENTICATE then   -- WAMP SPEC: [AUTHENTICATE, Signature|string, Extra|dict]
+
+        if session.isWampEstablished == 1 then
+            -- Protocol error: received second message - aborting
+            -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
+            self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+        else
+
+            local config = self:config()
+            local challenge = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "Challenge"))
+            local authInfo
+
+            if config.wampCRA.authType == "static" then
+
+                if dataObj[2] == challenge.signature then
+                    authInfo = {
+                        authid = challenge.authid,
+                        authrole = challenge.authrole,
+                        authmethod = challenge.authmethod,
+                        authprovider = challenge.authprovider
+                    }
+                end
+
+            elseif config.wampCRA.authType == "dynamic" then
+                authInfo = config.wampCRA.authCallback(regId, dataObj[2])
+            end
+
+            if authInfo then
+
+                session.isWampEstablished = 1
+                session.realm = challenge.realm
+                session.wampFeatures = challenge.wampFeatures
+                self.redis:hmset("wiSes" .. regId, session)
+
+                if self.redis:sismember("wiolaRealms",challenge.realm) == 0 then
+                    ngx.log(ngx.DEBUG, "No realm ", challenge.realm, " found. Creating...")
+                    self.redis:sadd("wiolaRealms",challenge.realm)
+                end
+
+                self.redis:sadd("wiRealm" .. challenge.realm .. "Sessions", regId)
+
+                local details = wamp_features
+                details.authid = authInfo.authid
+                details.authrole = authInfo.authrole
+                details.authmethod = authInfo.authmethod
+                details.authprovider = authInfo.authprovider
+
+                -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+                self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, details })
+
+            else
+                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+            end
+        end
+
+        -- Clean up Challenge data in any case
+        self.redis:del("wiSes" .. regId .. "Challenge")
+
     elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         -- No response is expected
     elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
