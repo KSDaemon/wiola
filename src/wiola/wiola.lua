@@ -201,55 +201,6 @@ function _M:addConnection(sid, wampProto)
     return regId, dataType
 end
 
---
--- Remove connection from wiola
---
--- regId - WAMP session registration ID
---
-function _M:removeConnection(regId)
-    local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
-
-    session.realm = session.realm or ""
-
---    var_dump(session)
-
-    ngx.log(ngx.DEBUG, "Removing session: ", regId)
-
-    local subscriptions = self.redis:array_to_hash(self.redis:hgetall("wiRealm" .. session.realm .. "Subs"))
-
-
-    for k, v in pairs(subscriptions) do
-        self.redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
-        if self.redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
-            self.redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
-            self.redis:hdel("wiRealm" .. session.realm .. "Subs",k)
-            self.redis:hdel("wiRealm" .. session.realm .. "RevSubs",v)
-        end
-    end
-
-    local rpcs = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "RPCs"))
-
-    for k, v in pairs(rpcs) do
-        self.redis:srem("wiRealm" .. session.realm .. "RPCs",k)
-        self.redis:del("wiRPC" .. k)
-    end
-
-    self.redis:del("wiSes" .. regId .. "RPCs")
-    self.redis:del("wiSes" .. regId .. "RevRPCs")
-    self.redis:del("wiSes" .. regId .. "Challenge")
-
-    self.redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
-    if self.redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
-        self.redis:srem("wiolaRealms",session.realm)
-    end
-
-    self.redis:del("wiSes" .. regId .. "Data")
-    self.redis:del("wiSes" .. regId)
-    self.redis:srem("wiolaIds",regId)
-
-    ngx.log(ngx.DEBUG, "Session data successfully removed!")
-end
-
 -- Prepare data for sending to client
 function _M:_putData(session, data)
     local dataObj

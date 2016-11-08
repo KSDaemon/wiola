@@ -15,7 +15,6 @@ Table of Contents
     * [configure](#configureconfig)
     * [setupRedis](#setupredis)
     * [addConnection](#addconnectionsid-wampproto)
-    * [removeConnection](#removeconnectionregid)
     * [receiveData](#receivedataregid-data)
     * [getPendingData](#getpendingdataregid)
     * [processPostData](#processpostdatasid-realm-data)
@@ -179,19 +178,6 @@ Returns:
 
  * **WAMP session ID** (integer)
  * **Connection data type** (string: 'text' or 'binary')
-
-[Back to TOC](#table-of-contents)
-
-removeConnection(regId)
-------------------------------------------
-
-Removes connection from wiola control. Cleans all cached data. Do not neglect this method on connection termination.
-
-Parameters:
-
- * **regId** - WAMP session ID
-
-Returns: nothing
 
 [Back to TOC](#table-of-contents)
 
