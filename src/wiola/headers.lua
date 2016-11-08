@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-ngx.header["Server"] = "wiola/Lua v0.5.2"
+ngx.header["Server"] = "wiola/Lua v0.6.0"
 
 function has(tab, val)
     for index, value in ipairs (tab) do
