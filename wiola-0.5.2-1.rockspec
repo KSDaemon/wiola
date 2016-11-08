@@ -23,6 +23,7 @@ dependencies = {
     "lua >= 5.1",
     "luarestyredis",
     "rapidjson >= 0.3",
+    "lua-resty-hmac >= 1.0",
     "lua-messagepack >= 0.3"
 }
 

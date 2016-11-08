@@ -66,6 +66,7 @@ To use wiola you need:
 * [lua-resty-redis][]
 * [Redis server][]
 * [lua-rapidjson][]
+* [lua-resty-hmac][] (optional, required for WAMP-CRA)
 * [lua-MessagePack][] (optional)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty][] server.
@@ -305,3 +306,4 @@ See Also
 [lua-resty-redis]: https://github.com/agentzh/lua-resty-redis
 [Redis server]: http://redis.io
 [lua-MessagePack]: http://fperrad.github.io/lua-MessagePack/
+[lua-resty-hmac]: https://github.com/jamesmarlowe/lua-resty-hmac
