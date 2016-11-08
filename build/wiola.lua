@@ -5,7 +5,7 @@
 --
 
 local _M = {
-    _VERSION = '0.5.2',
+    _VERSION = '0.6.0',
 }
 
 _M.__index = _M
@@ -16,7 +16,7 @@ setmetatable(_M, {
     end })
 
 local wamp_features = {
-    agent = "wiola/Lua v0.5.2",
+    agent = "wiola/Lua v" .. _M._VERSION,
     roles = {
         broker = {
             features = {
@@ -36,34 +36,7 @@ local wamp_features = {
     }
 }
 
--- Redis connection configuration
-local redisConf = {
-    host = "unix:/tmp/redis.sock",
-    port = nil,
-    db = nil
-}
-
--- Wiola Runtime configuration
-local wiolaConf = {
-    callerIdentification = "auto",   -- auto | never | always
-    cookieAuth = {
-        authType = "none",          -- none | static | dynamic
-        cookieName = "wampauth",
-        staticCredentials = nil, --{
-            -- "user1", "user2:password2", "secretkey3"
-        --},
-        authCallback = nil
-    },
-    wampCRA = {
-        authType = "none",          -- none | static | dynamic
-        staticCredentials = nil, --{
-            -- { authid = "user1", authrole = "userRole1", secret="secret1" },
-            -- { authid = "user2", authrole = "userRole2", secret="secret2" }
-        --},
-        challengeCallback = nil,
-        authCallback = nil
-    }
-}
+local wiola_config = require "wiola.config"
 
 local WAMP_MSG_SPEC = {
     HELLO = 1,
@@ -92,6 +65,17 @@ local WAMP_MSG_SPEC = {
     YIELD = 70
 }
 
+-- Check for a value in table
+local has = function(tab, val)
+    for index, value in ipairs (tab) do
+        if value == val then
+            return true
+        end
+    end
+
+    return false
+end
+
 --
 -- Create a new instance
 --
@@ -118,6 +102,20 @@ function _M:_getRegId()
     return regId
 end
 
+-- Generate a random string
+function _M:_randomString(length)
+    local str = "";
+    local time = self.redis:time()
+
+--    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
+    math.randomseed( time[1] * 1000000 + time[2] )
+
+    for i = 1, length do
+        str = str .. string.char(math.random(32, 126));
+    end
+    return str;
+end
+
 -- Validate uri for WAMP requirements
 function _M:_validateURI(uri)
     local m, err = ngx.re.match(uri, "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$")
@@ -129,72 +127,12 @@ function _M:_validateURI(uri)
 end
 
 --
--- Configure Wiola
+-- Get or set Wiola Runtime configuration
 --
--- config - Configuration table with possible options:
---          {
---              redis = {
---                  host = string - redis host or unix socket (default: "unix:/tmp/redis.sock"),
---                  port = number - redis port in case of network use (default: nil),
---                  db = number - redis database to select (default: nil)
---              },
---              callerIdentification = string - Disclose caller identification?
---                                              Possible values: auto | never | always. (default: "auto")
---          }
+-- see wiola/config.lua:config() for specification
 --
-function _M:configure(config)
-    if config.redis then
-
-        if config.redis.host ~= nil then
-            redisConf.host = config.redis.host
-        end
-
-        if config.redis.port ~= nil then
-            redisConf.port = config.redis.port
-        end
-
-        if config.redis.db ~= nil then
-            redisConf.db = config.redis.db
-        end
-    end
-
-    if config.callerIdentification ~= nil then
-        wiolaConf.callerIdentification = config.callerIdentification
-    end
-
-    if config.cookieAuth then
-
-        if config.cookieAuth.authType ~= nil then
-            wiolaConf.cookieAuth.authType = config.cookieAuth.authType
-        end
-
-        if config.cookieAuth.cookieName ~= nil then
-            wiolaConf.cookieAuth.cookieName = config.cookieAuth.cookieName
-        end
-
-        if config.cookieAuth.staticCredentials ~= nil then
-            wiolaConf.cookieAuth.staticCredentials = config.cookieAuth.staticCredentials
-        end
-
-        if config.cookieAuth.authCallback ~= nil then
-            wiolaConf.cookieAuth.authCallback = config.cookieAuth.authCallback
-        end
-    end
-
-    if config.wampCRA then
-
-        if config.wampCRA.authType ~= nil then
-            wiolaConf.wampCRA.authType = config.wampCRA.authType
-        end
-
-        if config.wampCRA.staticCredentials ~= nil then
-            wiolaConf.wampCRA.staticCredentials = config.wampCRA.staticCredentials
-        end
-
-        if config.wampCRA.authCallback ~= nil then
-            wiolaConf.wampCRA.authCallback = config.wampCRA.authCallback
-        end
-    end
+function _M:config(config)
+    return wiola_config.config(config)
 end
 
 --
@@ -208,14 +146,16 @@ function _M:setupRedis()
     local redisLib = require "resty.redis"
     self.redis = redisLib:new()
 
-    if redisConf.port == nil then
-        redisOk, redisErr = self.redis:connect(redisConf.host)
+    local conf = self:config()
+
+    if conf.redis.port == nil then
+        redisOk, redisErr = self.redis:connect(conf.redis.host)
     else
-        redisOk, redisErr = self.redis:connect(redisConf.host, redisConf.port)
+        redisOk, redisErr = self.redis:connect(conf.redis.host, conf.redis.port)
     end
 
-    if redisOk and redisConf.db ~= nil then
-        self.redis:select(redisConf.db)
+    if redisOk and conf.redis.db ~= nil then
+        self.redis:select(conf.redis.db)
     end
 
     return redisOk, redisErr
@@ -256,46 +196,6 @@ function _M:addConnection(sid, wampProto)
     )
 
     return regId, dataType
-end
-
---
--- Remove connection from wiola
---
--- regId - WAMP session registration ID
---
-function _M:removeConnection(regId)
-    local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
-
-    local subscriptions = self.redis:array_to_hash(self.redis:hgetall("wiRealm" .. session.realm .. "Subs"))
-
-
-    for k, v in pairs(subscriptions) do
-        self.redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
-        if self.redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
-            self.redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
-            self.redis:hdel("wiRealm" .. session.realm .. "Subs",k)
-            self.redis:hdel("wiRealm" .. session.realm .. "RevSubs",v)
-        end
-    end
-
-    local rpcs = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "RPCs"))
-
-    for k, v in pairs(rpcs) do
-        self.redis:srem("wiRealm" .. session.realm .. "RPCs",k)
-        self.redis:del("wiRPC" .. k)
-    end
-
-    self.redis:del("wiSes" .. regId .. "RPCs")
-    self.redis:del("wiSes" .. regId .. "RevRPCs")
-
-    self.redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
-    if self.redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
-        self.redis:srem("wiolaRealms",session.realm)
-    end
-
-    self.redis:del("wiSes" .. regId .. "Data")
-    self.redis:del("wiSes" .. regId)
-    self.redis:srem("wiolaIds",regId)
 end
 
 -- Prepare data for sending to client
@@ -362,24 +262,146 @@ function _M:receiveData(regId, data)
         else
             local realm = dataObj[2]
             if self:_validateURI(realm) then
-                session.isWampEstablished = 1
-                session.realm = realm
-                session.wampFeatures = json.encode(dataObj[3])
-                self.redis:hmset("wiSes" .. regId, session)
 
-                if self.redis:sismember("wiolaRealms",realm) == 0 then
-                    self.redis:sadd("wiolaRealms",realm)
+                local config = self:config()
+                if config.wampCRA.authType ~= "none" then
+
+                    if dataObj[3].authmethods and has(dataObj[3].authmethods, "wampcra") and dataObj[3].authid then
+
+                        local challenge, challengeString, signature
+
+                        self.redis:hmset("wiSes" .. regId .. "Challenge", "realm", realm)
+                        self.redis:hmset("wiSes" .. regId .. "Challenge", "wampFeatures", json.encode(dataObj[3]))
+
+                        if config.wampCRA.authType == "static" then
+
+                            if config.wampCRA.staticCredentials[dataObj[3].authid] then
+
+                                challenge = {
+                                    authid = dataObj[3].authid,
+                                    authrole = config.wampCRA.staticCredentials[dataObj[3].authid].authrole,
+                                    authmethod = "wampcra",
+                                    authprovider = "wiolaStaticAuth",
+                                    nonce = self:_randomString(16),
+                                    timestamp = os.date("!%FT%TZ"), -- without ms. "!%FT%T.%LZ"
+                                    session = regId
+                                }
+
+                                challengeString = json.encode(challenge)
+
+                                local hmac = require "resty.hmac"
+                                local hm, err = hmac:new(config.wampCRA.staticCredentials[dataObj[3].authid].secret)
+
+                                signature, err = hm:generate_signature("sha256", challengeString)
+
+                                if signature then
+
+                                    self.redis:hmset("wiSes" .. regId .. "Challenge", challenge)
+                                    self.redis:hmset("wiSes" .. regId .. "Challenge", "signature", signature)
+
+                                    -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
+                                    self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challengeString } })
+
+                                else
+                                    -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                                    self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                                end
+                            else
+                                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                                self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                            end
+
+                        elseif config.wampCRA.authType == "dynamic" then
+
+                            challenge = config.wampCRA.challengeCallback(regId, dataObj[3].authid)
+
+                            -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
+                            self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challenge } })
+                        end
+                    else
+                        -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                        self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+                    end
+                else
+
+                    session.isWampEstablished = 1
+                    session.realm = realm
+                    session.wampFeatures = json.encode(dataObj[3])
+                    self.redis:hmset("wiSes" .. regId, session)
+
+                    if self.redis:sismember("wiolaRealms",realm) == 0 then
+                        self.redis:sadd("wiolaRealms",realm)
+                    end
+
+                    self.redis:sadd("wiRealm" .. realm .. "Sessions", regId)
+
+                    -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+                    self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+
                 end
-
-                self.redis:sadd("wiRealm" .. realm .. "Sessions", regId)
-
-                -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
-                self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
             else
                 -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
                 self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.invalid_uri" })
             end
         end
+    elseif dataObj[1] == WAMP_MSG_SPEC.AUTHENTICATE then   -- WAMP SPEC: [AUTHENTICATE, Signature|string, Extra|dict]
+
+        if session.isWampEstablished == 1 then
+            -- Protocol error: received second message - aborting
+            -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
+            self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+        else
+
+            local config = self:config()
+            local challenge = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "Challenge"))
+            local authInfo
+
+            if config.wampCRA.authType == "static" then
+
+                if dataObj[2] == challenge.signature then
+                    authInfo = {
+                        authid = challenge.authid,
+                        authrole = challenge.authrole,
+                        authmethod = challenge.authmethod,
+                        authprovider = challenge.authprovider
+                    }
+                end
+
+            elseif config.wampCRA.authType == "dynamic" then
+                authInfo = config.wampCRA.authCallback(regId, dataObj[2])
+            end
+
+            if authInfo then
+
+                session.isWampEstablished = 1
+                session.realm = challenge.realm
+                session.wampFeatures = challenge.wampFeatures
+                self.redis:hmset("wiSes" .. regId, session)
+
+                if self.redis:sismember("wiolaRealms",challenge.realm) == 0 then
+                    self.redis:sadd("wiolaRealms",challenge.realm)
+                end
+
+                self.redis:sadd("wiRealm" .. challenge.realm .. "Sessions", regId)
+
+                local details = wamp_features
+                details.authid = authInfo.authid
+                details.authrole = authInfo.authrole
+                details.authmethod = authInfo.authmethod
+                details.authprovider = authInfo.authprovider
+
+                -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
+                self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, details })
+
+            else
+                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                self:_putData(session, { WAMP_MSG_SPEC.ABORT, setmetatable({}, { __jsontype = 'object' }), "wamp.error.authorization_failed" })
+            end
+        end
+
+        -- Clean up Challenge data in any case
+        self.redis:del("wiSes" .. regId .. "Challenge")
+
     elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         -- No response is expected
     elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then   -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
@@ -597,8 +619,9 @@ function _M:receiveData(regId, data)
 
                     local details = setmetatable({}, { __jsontype = 'object' })
 
-                    if wiolaConf.callerIdentification == "always" or
-                       (wiolaConf.callerIdentification == "auto" and
+                    local conf = self:config()
+                    if conf.callerIdentification == "always" or
+                       (conf.callerIdentification == "auto" and
                        ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
                         (regInfo.disclose_caller == true))) then
                         details.caller = regId
@@ -794,7 +817,8 @@ function _M:processPostData(sid, realm, data)
             httpCode = ngx.HTTP_OK
         end
 
-        self.removeConnection(regId)
+        local wiola_cleanup = require "wiola.cleanup"
+        wiola_cleanup.cleanupSession(self.redis, regId)
     else
         res = json.encode({ result = false, error = "Message type not supported" })
         httpCode = ngx.HTTP_FORBIDDEN
