@@ -17,7 +17,7 @@ function has(tab, val)
 end
 
 local wiola_config = require "wiola.config"
-local conf = wiola_config:config()
+local conf = wiola_config.config()
 
 if conf.cookieAuth.authType ~= "none" then
 

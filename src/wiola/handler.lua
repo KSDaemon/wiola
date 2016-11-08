@@ -29,7 +29,37 @@ local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.hea
 ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection)
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
-local cleanExit = false
+local function removeConnection(premature, sessionId)
+
+    ngx.log(ngx.DEBUG, "removeConnection callback fired!")
+
+    local redisOk, redisErr
+    local redisLib = require "resty.redis"
+    local wiola_config = require "wiola.config"
+
+    local redis = redisLib:new()
+    local conf = wiola_config.config()
+
+    if conf.redis.port == nil then
+        redisOk, redisErr = redis:connect(conf.redis.host)
+    else
+        redisOk, redisErr = redis:connect(conf.redis.host, conf.redis.port)
+    end
+
+    if redisOk and conf.redis.db ~= nil then
+        redis:select(conf.redis.db)
+    end
+
+    local wiola_cleanup = require "wiola.cleanup"
+    wiola_cleanup.cleanupSession(redis, sessionId)
+
+end
+
+--local ok, err = ngx.on_abort(removeConnection)
+--if not ok then
+--    ngx.log(ngx.ERR, "failed to register the on_abort callback: ", err)
+--    ngx.exit(444)
+--end
 
 while true do
     ngx.log(ngx.DEBUG, "Started handler loop!")
@@ -55,7 +85,7 @@ while true do
 
     if webSocket.fatal then
         ngx.log(ngx.ERR, "Failed to receive frame: ", err)
-        wampServer:removeConnection(sessionId)
+        ngx.timer.at(0, removeConnection, sessionId)
         return ngx.exit(444)
     end
 
@@ -66,20 +96,20 @@ while true do
         local bytes, err = webSocket:send_ping()
         if not bytes then
             ngx.log(ngx.ERR, "Failed to send ping: ", err)
-            wampServer:removeConnection(sessionId)
+            ngx.timer.at(0, removeConnection, sessionId)
             return ngx.exit(444)
         end
 
     elseif typ == "close" then
 
         ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
-        wampServer:removeConnection(sessionId)
         local bytes, err = webSocket:send_close(1000, "Closing connection")
             if not bytes then
                 ngx.log(ngx.ERR, "Failed to send the close frame: ", err)
                 return
             end
-        cleanExit = true
+        ngx.timer.at(0, removeConnection, sessionId)
+        webSocket:send_close()
         break
 
     elseif typ == "ping" then
@@ -87,7 +117,7 @@ while true do
         local bytes, err = webSocket:send_pong()
         if not bytes then
             ngx.log(ngx.ERR, "Failed to send pong: ", err)
-            wampServer:removeConnection(sessionId)
+            ngx.timer.at(0, removeConnection, sessionId)
             return ngx.exit(444)
         end
 
@@ -108,10 +138,4 @@ while true do
     end
 
     ngx.log(ngx.DEBUG, "Finished handler loop!")
-end
-
--- Just for clearance
-if not cleanExit then
-    webSocket:send_close()
-    wampServer:removeConnection(sessionId)
 end

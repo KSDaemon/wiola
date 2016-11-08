@@ -51,7 +51,7 @@ local _M = {}
 --          }
 -- without params it just returns current configuration
 --
-function _M:config(config)
+function _M.config(config)
 
     if not config then
         local conf = wiolaConf
