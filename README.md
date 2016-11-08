@@ -12,12 +12,13 @@ Table of Contents
 * [Installation](#installation)
 * [Dependencies](#dependencies)
 * [Methods](#methods)
-    * [configure](#configureconfig)
+    * [configure](#configconfig)
     * [setupRedis](#setupredis)
     * [addConnection](#addconnectionsid-wampproto)
     * [receiveData](#receivedataregid-data)
     * [getPendingData](#getpendingdataregid)
     * [processPostData](#processpostdatasid-realm-data)
+* [Authentication](#authentication)
 * [Copyright and License](#copyright-and-license)
 * [See Also](#see-also)
 
@@ -39,6 +40,8 @@ wiola supports next WAMP roles and features:
     * caller exclusion
     * caller identification
     * progressive call results
+* Challenge Response Authentication ("WAMP-CRA")
+* Cookie Authentication
 
 Wiola supports JSON and msgpack serializers.
 
@@ -150,6 +153,52 @@ Parameters:
 When called without parameters, returns current configuration.
 When setting configuration, returns nothing.
 
+Config example (multiple options, just for showcase):
+```nginx
+    init_by_lua_block {
+        local cfg = require "wiola.config"
+        cfg.config({
+            callerIdentification = "always",
+            redis = {
+                host = "unix:/tmp/redis.sock"   -- Optional parameter. Can be hostname/ip or socket path
+                --port 6379                     -- Optional parameter. Should be set when using hostname/ip
+                                                -- Omit for socket connection
+                --db 25                         -- Optional parameter. Redis db to use
+            },
+            cookieAuth = {
+                authType = "none",              -- none | static | dynamic
+                cookieName = "wampauth",
+                staticCredentials = { "user1:pass1", "user2:pass2"},
+                authCallback = function (creds)
+                    if creds ~= "" then
+                        return true
+                    end
+
+                    return false
+                end
+            },
+            wampCRA = {
+                authType = "dynamic",              -- none | static | dynamic
+                staticCredentials = {
+                    user1 = { authrole = "userRole1", secret="secret1" },
+                    user2 = { authrole = "userRole2", secret="secret2" }
+                },
+                challengeCallback = function (sessionid, authid)
+                    return "{ \"nonce\": \"LHRTC9zeOIrt_9U3\"," ..
+                             "\"authprovider\": \"usersProvider\", \"authid\": \"" .. authid .. "\"," ..
+                             "\"timestamp\": \"" .. os.date("!%FT%TZ") .. "\"," ..
+                             "\"authrole\": \"userRole1\", \"authmethod\": \"wampcra\"," ..
+                             "\"session\": " .. sessionid .. "}"
+                end,
+                authCallback = function (sessionid, signature)
+                    return { authid="user1", authrole="userRole1", authmethod="wampcra", authprovider="usersProvider" }
+                end
+            }
+        })
+    }
+```
+
+
 [Back to TOC](#table-of-contents)
 
 setupRedis()
@@ -230,6 +279,66 @@ Returns:
 
  * **response data** (JSON encoded WAMP response message in case of error, or { result = true })
  * **httpCode** HTTP status code (HTTP_OK/200 in case of success, HTTP_FORBIDDEN/403 in case of error)
+
+[Back to TOC](#table-of-contents)
+
+Authentication
+==============
+
+Beginning with v0.6.0 Wiola supports several types of authentication:
+
+* Cookie authentication:
+     * Static configuration
+     * Dynamic callback
+* Challenge Response Authentication:
+     * Static configuration
+     * Dynamic callback
+
+Also it is possible to use both types of authentication :) 
+To setup authentication you need to [configure](#configconfig) Wiola somewhere in nginx/openresty before request processing.
+In simple case, you can do it just in nginx http config section.
+
+```lua
+local cfg = require "wiola.config"
+cfg.config({
+    cookieAuth = {
+        authType = "dynamic",              -- none | static | dynamic
+        cookieName = "wampauth",
+        staticCredentials = { "user1:pass1", "user2:pass2"},
+        authCallback = function (creds)
+            -- Validate credentials somehow
+            -- return true, if valid 
+            if isValid(creds) then 
+                return true
+            end
+
+            return false
+        end
+    },
+    wampCRA = {
+        authType = "dynamic",              -- none | static | dynamic
+        staticCredentials = {
+            user1 = { authrole = "userRole1", secret="secret1" },
+            user2 = { authrole = "userRole2", secret="secret2" }
+        },
+        challengeCallback = function (sessionid, authid)
+            -- Generate a challenge string somehow and return it
+            -- Do not forget to save it somewhere for response validation!
+            
+            return "{ \"nonce\": \"LHRTC9zeOIrt_9U3\"," ..
+                     "\"authprovider\": \"usersProvider\", \"authid\": \"" .. authid .. "\"," ..
+                     "\"timestamp\": \"" .. os.date("!%FT%TZ") .. "\"," ..
+                     "\"authrole\": \"userRole1\", \"authmethod\": \"wampcra\"," ..
+                     "\"session\": " .. sessionid .. "}"
+        end,
+        authCallback = function (sessionid, signature)
+            -- Validate responsed signature against challenge
+            -- return auth info object (like bellow) or nil if failed
+            return { authid="user1", authrole="userRole1", authmethod="wampcra", authprovider="usersProvider" }
+        end
+    }
+})
+```
 
 [Back to TOC](#table-of-contents)
 
