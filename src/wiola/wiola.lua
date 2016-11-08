@@ -246,6 +246,8 @@ function _M:removeConnection(regId)
     self.redis:del("wiSes" .. regId .. "Data")
     self.redis:del("wiSes" .. regId)
     self.redis:srem("wiolaIds",regId)
+
+    ngx.log(ngx.DEBUG, "Session data successfully removed!")
 end
 
 -- Prepare data for sending to client
