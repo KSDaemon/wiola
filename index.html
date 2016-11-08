@@ -46,14 +46,15 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <a href="#methods">Methods</a>
 
 <ul>
-<li><a href="#setupredishost-port-db">setupRedis</a></li>
+<li><a href="#configconfig">configure</a></li>
+<li><a href="#setupredis">setupRedis</a></li>
 <li><a href="#addconnectionsid-wampproto">addConnection</a></li>
-<li><a href="#removeconnectionregid">removeConnection</a></li>
 <li><a href="#receivedataregid-data">receiveData</a></li>
 <li><a href="#getpendingdataregid">getPendingData</a></li>
 <li><a href="#processpostdatasid-realm-data">processPostData</a></li>
 </ul>
 </li>
+<li><a href="#authentication">Authentication</a></li>
 <li><a href="#copyright-and-license">Copyright and License</a></li>
 <li><a href="#see-also">See Also</a></li>
 </ul>
@@ -61,7 +62,7 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <h1>
 <a id="description" class="anchor" href="#description" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Description</h1>
 
-<p>Wiola implements <a href="http://wamp.ws">WAMP</a> v2 router specification on top of OpenResty web app server,
+<p>Wiola implements <a href="http://wamp-proto.org/">WAMP specification</a> v2 router specification on top of OpenResty web app server,
  which is actually nginx plus a bunch of 3rd party modules, such as lua-nginx-module, lua-resty-websocket,
  lua-resty-redis, lua-resty-libcjson and so on.</p>
 
@@ -85,6 +86,8 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <li>progressive call results</li>
 </ul>
 </li>
+<li>Challenge Response Authentication ("WAMP-CRA")</li>
+<li>Cookie Authentication</li>
 </ul>
 
 <p>Wiola supports JSON and msgpack serializers.</p>
@@ -114,6 +117,8 @@ Lua WebSocket addon, and Redis as cache store.</p>
 <li><a href="http://redis.io">Redis server</a></li>
 <li><a href="https://github.com/xpol/lua-rapidjson">lua-rapidjson</a></li>
 <li>
+<a href="https://github.com/jamesmarlowe/lua-resty-hmac">lua-resty-hmac</a> (optional, required for WAMP-CRA)</li>
+<li>
 <a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a> (optional)</li>
 </ul>
 
@@ -132,6 +137,9 @@ by <code>luarocks install wiola</code>.</p>
 <span class="pl-k">server</span> {
    <span class="pl-c"># example location for websocket WAMP connection</span>
    <span class="pl-k">location</span> <span class="pl-en">/ws/ </span>{
+      <span class="pl-k">set</span> <span class="pl-smi">$wiola_socket_timeout</span> <span class="pl-s">100</span>;     <span class="pl-c"># Optional parameter. Set the value to suit your needs</span>
+      <span class="pl-k">set</span> <span class="pl-smi">$wiola_max_payload_len</span> <span class="pl-s">65535</span>; <span class="pl-c"># Optional parameter. Set the value to suit your needs</span>
+
       <span class="pl-k">lua_socket_log_errors</span> off;
       <span class="pl-k">lua_check_client_abort</span> on;
 
@@ -159,20 +167,125 @@ by <code>luarocks install wiola</code>.</p>
 <a id="methods" class="anchor" href="#methods" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Methods</h1>
 
 <h2>
-<a id="setupredishost-port-db" class="anchor" href="#setupredishost-port-db" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>setupRedis(host, port, db)</h2>
+<a id="configconfig" class="anchor" href="#configconfig" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>config(config)</h2>
 
-<p>Configure and initialize connection to Redis server.</p>
+<p>Configure Wiola Instance or retrieve current configuration. All options are optional. Some options have default value, 
+or are nils if not specified.</p>
 
 <p>Parameters:</p>
 
 <ul>
 <li>
-<strong>host</strong> - Redis server host or Redis unix socket path</li>
+<strong>config</strong> - Configuration table with possible options:
+
+<ul>
 <li>
-<strong>port</strong> - Redis server port (in case of use network connection). Omit for socket connection.</li>
+<strong>redis</strong> - Redis connection configuration table:
+
+<ul>
+<li>
+<strong>host</strong> - Redis server host or Redis unix socket path. Default: "unix:/tmp/redis.sock"</li>
+<li>
+<strong>port</strong> - Redis server port (in case of use network connection). Omit for socket connection</li>
 <li>
 <strong>db</strong> - Redis database index to select</li>
 </ul>
+</li>
+<li>
+<strong>callerIdentification</strong> - Disclose caller identification? Possible values: auto | never | always. Default: "auto"</li>
+<li>
+<strong>cookieAuth</strong> - Cookie-based Authentication configuration table:
+
+<ul>
+<li>
+<strong>authType</strong> - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use</li>
+<li>
+<strong>cookieName</strong> - Name of cookie with auth info. Default: "wampauth"</li>
+<li>
+<strong>staticCredentials</strong> - Array-like table with string items, allowed to connect. Is used with authType="static"</li>
+<li>
+<strong>authCallback</strong> - Callback function for authentication. Is used with authType="dynamic". Value of cookieName
+is passed as first parameter. Should return boolean flag, true - allows connection, false - prevent connection</li>
+</ul>
+</li>
+<li>
+<strong>wampCRA</strong> - WAMP Challenge-Response ("WAMP-CRA") authentication configuration table:
+
+<ul>
+<li>
+<strong>authType</strong> - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use</li>
+<li>
+<strong>staticCredentials</strong> - table with keys, named as authids and values like { authrole = "userRole1", secret="secret1" },
+allowed to connect. Is used with authType="static"</li>
+<li>
+<strong>challengeCallback</strong> - Callback function for generating challenge info. Is used with authType="dynamic".
+Is called on HELLO message, passing session ID as first parameter and authid as second one. 
+Should return challenge string the client needs to create a signature for. 
+Check <a href="https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3">Challenge Response Authentication section in WAMP Specification</a> for more info.</li>
+<li>
+<strong>authCallback</strong> - Callback function for checking auth signature. Is used with authType="dynamic".
+Is called on AUTHENTICATE message, passing session ID as first parameter and signature as second one.
+Should return auth info object { authid="user1", authrole="userRole", authmethod="wampcra", authprovider="usersProvider" }
+or nil | false in case of failure.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>When called without parameters, returns current configuration.
+When setting configuration, returns nothing.</p>
+
+<p>Config example (multiple options, just for showcase):</p>
+
+<div class="highlight highlight-source-nginx"><pre>    <span class="pl-k">init_by_lua_block</span> {
+        <span class="pl-k">local</span> cfg = require <span class="pl-s">"wiola.config"</span>
+        cfg.config({
+            <span class="pl-k">callerIdentification</span> = <span class="pl-s">"always"</span>,
+            <span class="pl-k">redis</span> = {
+                <span class="pl-k">host</span> = <span class="pl-s">"unix:/tmp/redis.sock"</span>   -- Optional parameter. Can <span class="pl-s">be</span> hostname/ip or socket path
+                --<span class="pl-k">port</span> 6379                     -- Optional parameter. Should <span class="pl-s">be</span> set when using hostname/ip
+                                                -- <span class="pl-k">Omit</span> for socket connection
+                --<span class="pl-k">db</span> 25                         -- Optional parameter. Redis <span class="pl-s">db</span> to use
+            },
+            <span class="pl-k">cookieAuth</span> = {
+                <span class="pl-k">authType</span> = <span class="pl-s">"none"</span>,              -- none | static | dynamic
+                <span class="pl-k">cookieName</span> = <span class="pl-s">"wampauth"</span>,
+                <span class="pl-k">staticCredentials</span> = { <span class="pl-s">"user1:pass1"</span>, <span class="pl-s">"user2:pass2"</span>},
+                <span class="pl-k">authCallback</span> = function (creds)
+                    <span class="pl-k">if</span> creds <span class="pl-sr">~</span>= <span class="pl-s">""</span> then
+                        <span class="pl-c1">return</span> true
+                    end
+
+                    return false
+                end
+            },
+            wampCRA = {
+                authType = <span class="pl-s">"dynamic"</span>,              -- none | static | dynamic
+                staticCredentials = {
+                    user1 = { authrole = <span class="pl-s">"userRole1"</span>, secret=<span class="pl-s">"secret1"</span> },
+                    user2 = { authrole = <span class="pl-s">"userRole2"</span>, secret=<span class="pl-s">"secret2"</span> }
+                },
+                challengeCallback = function (sessionid, authid)
+                    return <span class="pl-s">"{ <span class="pl-cce">\"</span>nonce<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>LHRTC9zeOIrt_9U3<span class="pl-cce">\"</span>,"</span> ..
+                             <span class="pl-s">"<span class="pl-cce">\"</span>authprovider<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>usersProvider<span class="pl-cce">\"</span>, <span class="pl-cce">\"</span>authid<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>"</span> .. authid .. <span class="pl-s">"<span class="pl-cce">\"</span>,"</span> ..
+                             <span class="pl-s">"<span class="pl-cce">\"</span>timestamp<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>"</span> .. os.date(<span class="pl-s">"!%FT%TZ"</span>) .. <span class="pl-s">"<span class="pl-cce">\"</span>,"</span> ..
+                             <span class="pl-s">"<span class="pl-cce">\"</span>authrole<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>userRole1<span class="pl-cce">\"</span>, <span class="pl-cce">\"</span>authmethod<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>wampcra<span class="pl-cce">\"</span>,"</span> ..
+                             <span class="pl-s">"<span class="pl-cce">\"</span>session<span class="pl-cce">\"</span>: "</span> .. sessionid .. <span class="pl-s">"}"</span>
+                end,
+                authCallback = function (sessionid, signature)
+                    return { authid=<span class="pl-s">"user1"</span>, authrole=<span class="pl-s">"userRole1"</span>, authmethod=<span class="pl-s">"wampcra"</span>, authprovider=<span class="pl-s">"usersProvider"</span> }
+                end
+            }
+        })
+    }</pre></div>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h2>
+<a id="setupredis" class="anchor" href="#setupredis" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>setupRedis()</h2>
+
+<p>Initialize connection to Redis server.</p>
 
 <p>Returns:</p>
 
@@ -207,22 +320,6 @@ by <code>luarocks install wiola</code>.</p>
 <li>
 <strong>Connection data type</strong> (string: 'text' or 'binary')</li>
 </ul>
-
-<p><a href="#table-of-contents">Back to TOC</a></p>
-
-<h2>
-<a id="removeconnectionregid" class="anchor" href="#removeconnectionregid" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>removeConnection(regId)</h2>
-
-<p>Removes connection from viola control. Cleans all cached data. Do not neglect this method on connection termination.</p>
-
-<p>Parameters:</p>
-
-<ul>
-<li>
-<strong>regId</strong> - WAMP session ID</li>
-</ul>
-
-<p>Returns: nothing</p>
 
 <p><a href="#table-of-contents">Back to TOC</a></p>
 
@@ -301,6 +398,74 @@ so backend is a right place to notify other WAMP subscribers, but making a full 
 <p><a href="#table-of-contents">Back to TOC</a></p>
 
 <h1>
+<a id="authentication" class="anchor" href="#authentication" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Authentication</h1>
+
+<p>Beginning with v0.6.0 Wiola supports several types of authentication:</p>
+
+<ul>
+<li>Cookie authentication:
+
+<ul>
+<li>Static configuration</li>
+<li>Dynamic callback</li>
+</ul>
+</li>
+<li>Challenge Response Authentication:
+
+<ul>
+<li>Static configuration</li>
+<li>Dynamic callback</li>
+</ul>
+</li>
+</ul>
+
+<p>Also it is possible to use both types of authentication :) 
+To setup authentication you need to <a href="#configconfig">configure</a> Wiola somewhere in nginx/openresty before request processing.
+In simple case, you can do it just in nginx http config section.</p>
+
+<div class="highlight highlight-source-lua"><pre><span class="pl-k">local</span> cfg <span class="pl-k">=</span> <span class="pl-c1">require</span> <span class="pl-s"><span class="pl-pds">"</span>wiola.config<span class="pl-pds">"</span></span>
+cfg.<span class="pl-c1">config</span>({
+    cookieAuth <span class="pl-k">=</span> {
+        authType <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>dynamic<span class="pl-pds">"</span></span>,              <span class="pl-c">-- none | static | dynamic</span>
+        cookieName <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>wampauth<span class="pl-pds">"</span></span>,
+        staticCredentials <span class="pl-k">=</span> { <span class="pl-s"><span class="pl-pds">"</span>user1:pass1<span class="pl-pds">"</span></span>, <span class="pl-s"><span class="pl-pds">"</span>user2:pass2<span class="pl-pds">"</span></span>},
+        authCallback <span class="pl-k">=</span> <span class="pl-k">function</span> (creds)
+            <span class="pl-c">-- Validate credentials somehow</span>
+            <span class="pl-c">-- return true, if valid </span>
+            <span class="pl-k">if</span> <span class="pl-c1">isValid</span>(creds) <span class="pl-k">then</span> 
+                <span class="pl-k">return</span> <span class="pl-c1">true</span>
+            <span class="pl-k">end</span>
+
+            <span class="pl-k">return</span> <span class="pl-c1">false</span>
+        <span class="pl-k">end</span>
+    },
+    wampCRA <span class="pl-k">=</span> {
+        authType <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>dynamic<span class="pl-pds">"</span></span>,              <span class="pl-c">-- none | static | dynamic</span>
+        staticCredentials <span class="pl-k">=</span> {
+            user1 <span class="pl-k">=</span> { authrole <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>userRole1<span class="pl-pds">"</span></span>, secret<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>secret1<span class="pl-pds">"</span></span> },
+            user2 <span class="pl-k">=</span> { authrole <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>userRole2<span class="pl-pds">"</span></span>, secret<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>secret2<span class="pl-pds">"</span></span> }
+        },
+        challengeCallback <span class="pl-k">=</span> <span class="pl-k">function</span> (sessionid, authid)
+            <span class="pl-c">-- Generate a challenge string somehow and return it</span>
+            <span class="pl-c">-- Do not forget to save it somewhere for response validation!</span>
+
+            <span class="pl-k">return</span> <span class="pl-s"><span class="pl-pds">"</span>{ <span class="pl-cce">\"</span>nonce<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>LHRTC9zeOIrt_9U3<span class="pl-cce">\"</span>,<span class="pl-pds">"</span></span> <span class="pl-k">..</span>
+                     <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>authprovider<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>usersProvider<span class="pl-cce">\"</span>, <span class="pl-cce">\"</span>authid<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span><span class="pl-pds">"</span></span> <span class="pl-k">..</span> authid <span class="pl-k">..</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>,<span class="pl-pds">"</span></span> <span class="pl-k">..</span>
+                     <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>timestamp<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span><span class="pl-pds">"</span></span> <span class="pl-k">..</span> <span class="pl-c1">os.date</span>(<span class="pl-s"><span class="pl-pds">"</span>!%FT%TZ<span class="pl-pds">"</span></span>) <span class="pl-k">..</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>,<span class="pl-pds">"</span></span> <span class="pl-k">..</span>
+                     <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>authrole<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>userRole1<span class="pl-cce">\"</span>, <span class="pl-cce">\"</span>authmethod<span class="pl-cce">\"</span>: <span class="pl-cce">\"</span>wampcra<span class="pl-cce">\"</span>,<span class="pl-pds">"</span></span> <span class="pl-k">..</span>
+                     <span class="pl-s"><span class="pl-pds">"</span><span class="pl-cce">\"</span>session<span class="pl-cce">\"</span>: <span class="pl-pds">"</span></span> <span class="pl-k">..</span> sessionid <span class="pl-k">..</span> <span class="pl-s"><span class="pl-pds">"</span>}<span class="pl-pds">"</span></span>
+        <span class="pl-k">end</span>,
+        authCallback <span class="pl-k">=</span> <span class="pl-k">function</span> (sessionid, signature)
+            <span class="pl-c">-- Validate responsed signature against challenge</span>
+            <span class="pl-c">-- return auth info object (like bellow) or nil if failed</span>
+            <span class="pl-k">return</span> { authid<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>user1<span class="pl-pds">"</span></span>, authrole<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>userRole1<span class="pl-pds">"</span></span>, authmethod<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>wampcra<span class="pl-pds">"</span></span>, authprovider<span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">"</span>usersProvider<span class="pl-pds">"</span></span> }
+        <span class="pl-k">end</span>
+    }
+})</pre></div>
+
+<p><a href="#table-of-contents">Back to TOC</a></p>
+
+<h1>
 <a id="copyright-and-license" class="anchor" href="#copyright-and-license" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Copyright and License</h1>
 
 <p>Wiola library is licensed under the BSD 2-Clause license.</p>
@@ -336,16 +501,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
 <a id="see-also" class="anchor" href="#see-also" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>See Also</h1>
 
 <ul>
-<li><a href="http://wamp.ws">WAMP specification</a></li>
+<li><a href="http://wamp-proto.org/">WAMP specification</a></li>
+<li><a href="https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3">Challenge Response Authentication section in WAMP Specification</a></li>
 <li>
-<a href="https://github.com/KSDaemon/wampy.js">Wampy.js</a>. WAMP Javascript client-side implementation.</li>
+<a href="https://github.com/KSDaemon/wampy.js">Wampy.js</a>. WAMP Javascript client implementation</li>
 <li><a href="http://openresty.org">OpenResty</a></li>
 <li><a href="https://github.com/chaoslawful/lua-nginx-module">lua-nginx-module</a></li>
 <li><a href="https://github.com/agentzh/lua-resty-websocket">lua-resty-websocket</a></li>
-<li><a href="https://github.com/bungle/lua-resty-libcjson">lua-resty-libcjson</a></li>
 <li><a href="https://github.com/xpol/lua-rapidjson">lua-rapidjson</a></li>
 <li><a href="https://github.com/agentzh/lua-resty-redis">lua-resty-redis</a></li>
-<li><a href="http://redis.io">Redis key-value store</a></li>
+<li><a href="http://redis.io">Redis server</a></li>
 <li><a href="http://fperrad.github.io/lua-MessagePack/">lua-MessagePack</a></li>
 </ul>
 
