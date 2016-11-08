@@ -1,5 +1,5 @@
 package = "Wiola"
-version = "0.6.0-1"
+version = "0.6.0-2"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
@@ -23,7 +23,7 @@ dependencies = {
     "lua >= 5.1",
     "luarestyredis",
     "rapidjson >= 0.3",
-    "lua-resty-hmac >= 1.0",
+    "lua-resty-hmac >= v1.0",
     "lua-messagepack >= 0.3"
 }
 
