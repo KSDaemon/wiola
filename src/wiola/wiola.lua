@@ -91,14 +91,15 @@ end
 -- Generate unique Id
 function _M:_getRegId()
     local regId
+    local max = 2^53
     local time = self.redis:time()
 
 --    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
     math.randomseed( time[1] * 1000000 + time[2] )
 
     repeat
---        regId = math.random(9007199254740992)
-        regId = math.random(100000000000000)
+        regId = math.random(max)
+--        regId = math.random(100000000000000)
     until self.redis:sismember("wiolaIds", regId)
 
     return regId
@@ -571,6 +572,7 @@ function _M:receiveData(regId, data)
                 end
 
                 local subId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
+                ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(subId))
                 if subId then
                     self:_publishEvent(ss, subId, pubId, details, dataObj[5], dataObj[6])
 
@@ -594,9 +596,9 @@ function _M:receiveData(regId, data)
                     subscriptionId = self:_getRegId()
                     self.redis:hset("wiRealm" .. session.realm .. "Subs", dataObj[4], subscriptionId)
                     self.redis:hset("wiRealm" .. session.realm .. "RevSubs", subscriptionId, dataObj[4])
+                    subscriptionId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
                 end
 
-                ngx.log(ngx.DEBUG, "SUBSCRIBE: subscriptionId: ", subscriptionId)
                 self.redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions",regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
@@ -680,8 +682,9 @@ function _M:receiveData(regId, data)
                         end
                     end
 
-                    self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
                     self.redis:hmset("wiCall" .. dataObj[2], "callerSesId", session.sessId, "calleeSesId", calleeSess.sessId, "wiInvocId", invReqId)
+                    invReqId = tonumber(self.redis:hget("wiCall" .. dataObj[2], "wiInvocId"))
+                    self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
 
                     if #dataObj == 5 then
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
@@ -715,6 +718,7 @@ function _M:receiveData(regId, data)
                     end
                     self.redis:hset("wiSes" .. regId .. "RPCs", dataObj[4], registrationId)
                     self.redis:hset("wiSes" .. regId .. "RevRPCs", registrationId, dataObj[4])
+                    registrationId = tonumber(self.redis:hget("wiSes" .. regId .. "RPCs", dataObj[4]))
 
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
