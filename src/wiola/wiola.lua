@@ -572,8 +572,8 @@ function _M:receiveData(regId, data)
                 end
 
                 local subId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
-                ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(subId))
                 if subId then
+                    ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(subId))
                     self:_publishEvent(ss, subId, pubId, details, dataObj[5], dataObj[6])
 
                     if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
