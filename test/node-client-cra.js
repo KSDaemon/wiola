@@ -4,7 +4,7 @@
  * Date: 21.10.16
  */
 
-const Wampy = require('wampy');
+const Wampy = require('wampy').Wampy;
 const wampyCra = require('wampy-cra');
 const w3cws = require('websocket').w3cwebsocket;
 let ws, d = Date.now();

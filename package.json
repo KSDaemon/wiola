@@ -17,6 +17,7 @@
   "homepage": "http://ksdaemon.github.io/wiola/",
   "devDependencies": {
     "grunt": "^1.0.1",
-    "grunt-contrib-copy": "^1.0.0"
+    "grunt-contrib-copy": "^1.0.0",
+    "wampy": "^5.0.0"
   }
 }
