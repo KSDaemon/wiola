@@ -13,7 +13,7 @@ module.exports = function(grunt) {
                 expand: true,
                 flatten: true,
                 src: 'src/wiola/*.lua',
-                dest: 'build/',
+                dest: 'lib/',
                 options: {
                     process: function (content, srcpath) {
                         return content.replace(/\s*(\-\-)?\s*ngx\.log.*/g,'')
