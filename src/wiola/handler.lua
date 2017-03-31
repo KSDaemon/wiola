@@ -55,11 +55,16 @@ local function removeConnection(premature, sessionId)
 
 end
 
---local ok, err = ngx.on_abort(removeConnection)
---if not ok then
---    ngx.log(ngx.ERR, "failed to register the on_abort callback: ", err)
---    ngx.exit(444)
---end
+local function removeConnectionWrapper()
+    ngx.log(ngx.DEBUG, "client on_abort removeConnection callback fired!")
+    removeConnection(true, sessionId)
+end
+
+local ok, err = ngx.on_abort(removeConnectionWrapper)
+if not ok then
+    ngx.log(ngx.ERR, "failed to register the on_abort callback: ", err)
+    ngx.exit(444)
+end
 
 while true do
     ngx.log(ngx.DEBUG, "Started handler loop!")
