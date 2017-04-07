@@ -7,7 +7,7 @@
 
 -- Redis connection configuration
 local redisConf = {
-    host = "unix:/tmp/redis.sock",
+    host = "unix:///tmp/redis.sock",
     port = nil,
     db = nil
 }

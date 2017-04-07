@@ -5,7 +5,7 @@
 --
 
 local _M = {
-    _VERSION = '0.6.0',
+    _VERSION = '0.6.1',
 }
 
 _M.__index = _M

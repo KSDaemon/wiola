@@ -47,10 +47,14 @@ local function removeConnection(premature, sessionId)
 
 end
 
---local ok, err = ngx.on_abort(removeConnection)
---if not ok then
---    ngx.exit(444)
---end
+local function removeConnectionWrapper()
+    removeConnection(true, sessionId)
+end
+
+local ok, err = ngx.on_abort(removeConnectionWrapper)
+if not ok then
+    ngx.exit(444)
+end
 
 while true do
     local cliData, cliErr = wampServer:getPendingData(sessionId)
