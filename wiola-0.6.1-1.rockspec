@@ -1,9 +1,9 @@
 package = "Wiola"
-version = "0.6.0-2"
+version = "0.6.1-1"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
-    tag = "v0.6.0"
+    tag = "v0.6.1"
 }
 
 description = {
@@ -24,17 +24,19 @@ dependencies = {
     "luarestyredis",
     "rapidjson >= 0.5",
     "lua-resty-hmac >= v1.0",
-    "lua-messagepack >= 0.3"
+    "lua-messagepack >= 0.3",
+    "redis-lua >= 2.0"
 }
 
 build = {
     type = 'builtin',
     modules = {
-        ['wiola'] = 'build/wiola.lua',
-        ['wiola.cleanup'] = 'build/cleanup.lua',
-        ['wiola.config'] = 'build/config.lua',
-        ['wiola.handler'] = 'build/handler.lua',
-        ['wiola.headers'] = 'build/headers.lua',
-        ['wiola.post-handler'] = 'build/post-handler.lua',
+        ['wiola'] = 'lib/wiola.lua',
+        ['wiola.cleanup'] = 'lib/cleanup.lua',
+        ['wiola.flushdb'] = 'lib/flushdb.lua',
+        ['wiola.config'] = 'lib/config.lua',
+        ['wiola.handler'] = 'lib/handler.lua',
+        ['wiola.headers'] = 'lib/headers.lua',
+        ['wiola.post-handler'] = 'lib/post-handler.lua',
     }
 }
