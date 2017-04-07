@@ -10,7 +10,6 @@ Table of Contents
 * [Description](#description)
 * [Usage example](#usage-example)
 * [Installation](#installation)
-* [Dependencies](#dependencies)
 * [Methods](#methods)
     * [configure](#configconfig)
     * [setupRedis](#setupredis)
@@ -70,43 +69,68 @@ To use wiola you need:
 * [lua-rapidjson][]
 * [lua-resty-hmac][] (optional, required for WAMP-CRA)
 * [lua-MessagePack][] (optional)
+* [redis-lua][] (optional)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty][] server.
 
 In any case, for your convenience, you can install Wiola through [luarocks](http://luarocks.org/modules/ksdaemon/wiola)
-by `luarocks install wiola`.
+by `luarocks install wiola` or through [OpenResty Package Manager] 
+by `opm install KSDaemon/wiola`. Unfortunately, not all dependencies are available in opm, so you need to manually 
+install missing ones. 
 
 Next thing is configuring nginx host. See example below.
 
 ```nginx
-# set search paths for pure Lua external libraries (';;' is the default path):
-# add paths for wiola and msgpack libs
-lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;';
+http {
 
-# Configure a vhost
-server {
-   # example location for websocket WAMP connection
-   location /ws/ {
-      set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
-      set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
-      
-      lua_socket_log_errors off;
-      lua_check_client_abort on;
+    # set search paths for pure Lua external libraries (';;' is the default path):
+    # add paths for wiola and msgpack libs
+    lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;';
 
-      # This is needed to set additional websocket protocol headers
-      header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
-      # Set a handler for connection
-      content_by_lua_file $document_root/lua/wiola/handler.lua;
-   }
+    init_by_lua_block {
 
-   # example location for a lightweight POST event publishing
-   location /wslight/ {
-      lua_socket_log_errors off;
-      lua_check_client_abort on;
+        -- Wiola configuration. You can read more in description of .configure() method below.
+        local cfg = require "wiola.config"
+        cfg.config({
+            redis = {
+                host = "unix:///tmp/redis.sock"   -- Optional parameter. Can be hostname/ip or socket path
+                --port = 6379                     -- Optional parameter. Should be set when using hostname/ip
+                                                -- Omit for socket connection
+                --db = 5                         -- Optional parameter. Redis db to use
+            }
+        })
 
-      content_by_lua_file $document_root/lua/wiola/post-handler.lua;
-   }
+        -- If you want automatically clean up redis db during nginx restart uncomment next two lines
+        -- for this to work, you need redis-lua library
+        --local wflush = require "wiola.flushdb"
+        --wflush.flushAll()
+    }
 
+    # Configure a vhost
+    server {
+       # example location for websocket WAMP connection
+       location /ws/ {
+          set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
+          set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
+          
+          lua_socket_log_errors off;
+          lua_check_client_abort on;
+    
+          # This is needed to set additional websocket protocol headers
+          header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
+          # Set a handler for connection
+          content_by_lua_file $document_root/lua/wiola/handler.lua;
+       }
+    
+       # example location for a lightweight POST event publishing
+       location /wslight/ {
+          lua_socket_log_errors off;
+          lua_check_client_abort on;
+    
+          content_by_lua_file $document_root/lua/wiola/post-handler.lua;
+       }
+    
+    }
 }
 ```
 
@@ -161,9 +185,9 @@ Config example (multiple options, just for showcase):
             callerIdentification = "always",
             redis = {
                 host = "unix:/tmp/redis.sock"   -- Optional parameter. Can be hostname/ip or socket path
-                --port 6379                     -- Optional parameter. Should be set when using hostname/ip
+                --port = 6379                     -- Optional parameter. Should be set when using hostname/ip
                                                 -- Omit for socket connection
-                --db 25                         -- Optional parameter. Redis db to use
+                --db = 5                         -- Optional parameter. Redis db to use
             },
             cookieAuth = {
                 authType = "none",              -- none | static | dynamic
@@ -347,7 +371,7 @@ Copyright and License
 
 Wiola library is licensed under the BSD 2-Clause license.
 
-Copyright (c) 2014, Konstantin Burkalev
+Copyright (c) 2014-2017, Konstantin Burkalev
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -394,6 +418,7 @@ See Also
 [Challenge Response Authentication section in WAMP Specification]: https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3
 [Wampy.js]: https://github.com/KSDaemon/wampy.js
 [OpenResty]: http://openresty.org
+[OpenResty Package Manager]: http://opm.openresty.org/ 
 [luajit]: http://luajit.org/
 [lua-nginx-module]: https://github.com/chaoslawful/lua-nginx-module
 [lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
@@ -402,3 +427,4 @@ See Also
 [Redis server]: http://redis.io
 [lua-MessagePack]: http://fperrad.github.io/lua-MessagePack/
 [lua-resty-hmac]: https://github.com/jamesmarlowe/lua-resty-hmac
+[redis-lua]: https://github.com/nrk/redis-lua
