@@ -74,11 +74,11 @@ while true do
 
     while cliData ~= ngx.null do
         ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
-
+        local bytes, err
         if dataType == 'binary' then
-            local bytes, err = webSocket:send_binary(cliData)
+            bytes, err = webSocket:send_binary(cliData)
         else
-            local bytes, err = webSocket:send_text(cliData)
+            bytes, err = webSocket:send_text(cliData)
         end
 
         if not bytes then
