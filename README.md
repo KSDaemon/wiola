@@ -1,7 +1,7 @@
 wiola
 =====
 
-WAMP (WebSocket Application Messaging Protocol) implementation on Lua, using the power of LUA Nginx module,
+WAMP (WebSocket Application Messaging Protocol) implementation on Lua, using the power of Lua Nginx module,
 Lua WebSocket addon, and Redis as cache store.
 
 Table of Contents
