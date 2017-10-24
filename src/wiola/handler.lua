@@ -67,9 +67,9 @@ if not ok then
 end
 
 while true do
-    ngx.log(ngx.DEBUG, "Started handler loop!")
+--    ngx.log(ngx.DEBUG, "Started handler loop!")
 
-    ngx.log(ngx.DEBUG, "Checking data for client...")
+--    ngx.log(ngx.DEBUG, "Checking data for client...")
     local cliData, cliErr = wampServer:getPendingData(sessionId)
 
     while cliData ~= ngx.null do
@@ -142,5 +142,5 @@ while true do
 
     end
 
-    ngx.log(ngx.DEBUG, "Finished handler loop!")
+--    ngx.log(ngx.DEBUG, "Finished handler loop!")
 end
