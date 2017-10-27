@@ -1,9 +1,9 @@
 package = "Wiola"
-version = "0.6.1-1"
+version = "0.7.0-1"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
-    tag = "v0.6.1"
+    tag = "v0.7.0"
 }
 
 description = {
@@ -24,7 +24,7 @@ dependencies = {
     "luarestyredis",
     "rapidjson >= 0.5",
     "lua-resty-hmac >= v1.0",
-    "lua-messagepack >= 0.3",
+    "lua-messagepack >= 0.4",
     "redis-lua >= 2.0"
 }
 
@@ -37,6 +37,8 @@ build = {
         ['wiola.config'] = 'lib/config.lua',
         ['wiola.handler'] = 'lib/handler.lua',
         ['wiola.headers'] = 'lib/headers.lua',
+        ['wiola.json_serializer'] = 'lib/json_serializer.lua',
+        ['wiola.msgpack_serializer'] = 'lib/msgpack_serializer.lua',
         ['wiola.post-handler'] = 'lib/post-handler.lua',
     }
 }

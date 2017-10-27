@@ -7,7 +7,7 @@
 require "debug.var_dump"
 
 local _M = {
-    _VERSION = '0.6.1',
+    _VERSION = '0.7.0',
 }
 
 _M.__index = _M
