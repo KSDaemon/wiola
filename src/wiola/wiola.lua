@@ -39,6 +39,10 @@ local wamp_features = {
 }
 
 local wiola_config = require "wiola.config"
+local serializers = {
+    json = require('wiola.json_serializer'),
+    msgpack = require('wiola.msgpack_serializer')
+}
 
 local WAMP_MSG_SPEC = {
     HELLO = 1,
@@ -196,6 +200,7 @@ function _M:addConnection(sid, wampProto)
 --        realm = nil,
 --        wamp_features = nil,
         wamp_protocol = wampProto,
+        encoding = string.match(wampProto,'.*%.([^.]+)$'),
         dataType = dataType }
     )
 
@@ -204,18 +209,9 @@ end
 
 -- Prepare data for sending to client
 function _M:_putData(session, data)
-    local dataObj
-
-    if session.wamp_protocol == 'wamp.2.msgpack' then
-        local mp = require 'MessagePack'
-        dataObj = mp.pack(data)
-    else --if session.wamp_protocol == 'wamp.2.json'
-        local json = require "rapidjson"
-        dataObj = json.encode(data)
-    end
+    local dataObj = serializers[session.encoding].encode(data)
 
     ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
-
     self.redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
     ngx.log(ngx.DEBUG, "Pushed data for client into redis")
 end
@@ -252,19 +248,9 @@ end
 function _M:receiveData(regId, data)
     local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
     session.isWampEstablished = tonumber(session.isWampEstablished)
-    local json = require "rapidjson"
-    local dataObj
+    local json = require "rapidjson"    -- needed for WAMP-CRA
 
---    var_dump(session)
-
-    if session.wamp_protocol == 'wamp.2.msgpack' then
-        local mp = require 'MessagePack'
-        dataObj = mp.unpack(data)
-    else --if session.wamp_protocol == 'wamp.2.json'
-        dataObj = json.decode(data)
-    end
-
---    var_dump(dataObj)
+    local dataObj = serializers[session.encoding].decode(data)
 
     ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
 
