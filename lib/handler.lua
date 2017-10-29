@@ -60,11 +60,11 @@ while true do
     local cliData, cliErr = wampServer:getPendingData(sessionId)
 
     while cliData ~= ngx.null do
-
+        local bytes, err
         if dataType == 'binary' then
-            local bytes, err = webSocket:send_binary(cliData)
+            bytes, err = webSocket:send_binary(cliData)
         else
-            local bytes, err = webSocket:send_text(cliData)
+            bytes, err = webSocket:send_text(cliData)
         end
 
         if not bytes then

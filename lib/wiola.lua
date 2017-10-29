@@ -5,7 +5,7 @@
 --
 
 local _M = {
-    _VERSION = '0.6.1',
+    _VERSION = '0.7.0',
 }
 
 _M.__index = _M
@@ -37,6 +37,10 @@ local wamp_features = {
 }
 
 local wiola_config = require "wiola.config"
+local serializers = {
+    json = require('wiola.json_serializer'),
+    msgpack = require('wiola.msgpack_serializer')
+}
 
 local WAMP_MSG_SPEC = {
     HELLO = 1,
@@ -193,6 +197,7 @@ function _M:addConnection(sid, wampProto)
 --        realm = nil,
 --        wamp_features = nil,
         wamp_protocol = wampProto,
+        encoding = string.match(wampProto,'.*%.([^.]+)$'),
         dataType = dataType }
     )
 
@@ -201,16 +206,7 @@ end
 
 -- Prepare data for sending to client
 function _M:_putData(session, data)
-    local dataObj
-
-    if session.wamp_protocol == 'wamp.2.msgpack' then
-        local mp = require 'MessagePack'
-        dataObj = mp.pack(data)
-    else --if session.wamp_protocol == 'wamp.2.json'
-        local json = require "rapidjson"
-        dataObj = json.encode(data)
-    end
-
+    local dataObj = serializers[session.encoding].encode(data)
     self.redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
 end
 
@@ -244,15 +240,9 @@ end
 function _M:receiveData(regId, data)
     local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
     session.isWampEstablished = tonumber(session.isWampEstablished)
-    local json = require "rapidjson"
-    local dataObj
+    local json = require "rapidjson"    -- needed for WAMP-CRA
 
-    if session.wamp_protocol == 'wamp.2.msgpack' then
-        local mp = require 'MessagePack'
-        dataObj = mp.unpack(data)
-    else --if session.wamp_protocol == 'wamp.2.json'
-        dataObj = json.decode(data)
-    end
+    local dataObj = serializers[session.encoding].decode(data)
 
     -- Analyze WAMP message ID received
     if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
