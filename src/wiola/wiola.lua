@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-require "debug.var_dump"
+local getdump = require("debug.vardump").getdump
 
 local _M = {
     _VERSION = '0.7.0',
