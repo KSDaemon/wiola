@@ -82,6 +82,11 @@ local has = function(tab, val)
     return false
 end
 
+-- Format NUMBER for using in strings
+local formatNumber = function(n)
+    return string.format("%.0f", n)
+end
+
 --
 -- Create a new instance
 --
@@ -193,7 +198,7 @@ function _M:addConnection(sid, wampProto)
         dataType = 'text'
     end
 
-    self.redis:hmset("wiSes" .. regId,
+    self.redis:hmset("wiSes" .. formatNumber(regId),
         { connId = sid,
         sessId = regId,
         isWampEstablished = 0,
@@ -212,7 +217,7 @@ function _M:_putData(session, data)
     local dataObj = serializers[session.encoding].encode(data)
 
     ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
-    self.redis:rpush("wiSes" .. session.sessId .. "Data", dataObj)
+    self.redis:rpush("wiSes" .. formatNumber(session.sessId) .. "Data", dataObj)
     ngx.log(ngx.DEBUG, "Pushed data for client into redis")
 end
 
@@ -234,7 +239,7 @@ function _M:_publishEvent(sessIds, subId, pubId, details, args, argsKW)
     end
 
     for k, v in ipairs(sessIds) do
-        local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+        local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
         self:_putData(session, data)
     end
 end
@@ -246,13 +251,14 @@ end
 -- data - data, received through websocket
 --
 function _M:receiveData(regId, data)
-    local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId))
+    local regIdStr = formatNumber(regId)
+    local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regIdStr))
     session.isWampEstablished = tonumber(session.isWampEstablished)
     local json = require "rapidjson"    -- needed for WAMP-CRA
 
     local dataObj = serializers[session.encoding].decode(data)
 
-    ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
+    ngx.log(ngx.DEBUG, "Cli regId: ", regIdStr, " Received data. WAMP msg Id: ", dataObj[1])
 
     -- Analyze WAMP message ID received
     if dataObj[1] == WAMP_MSG_SPEC.HELLO then   -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
@@ -271,8 +277,8 @@ function _M:receiveData(regId, data)
 
                         local challenge, challengeString, signature
 
-                        self.redis:hmset("wiSes" .. regId .. "Challenge", "realm", realm)
-                        self.redis:hmset("wiSes" .. regId .. "Challenge", "wampFeatures", json.encode(dataObj[3]))
+                        self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "realm", realm)
+                        self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "wampFeatures", json.encode(dataObj[3]))
 
                         if config.wampCRA.authType == "static" then
 
@@ -297,8 +303,8 @@ function _M:receiveData(regId, data)
 
                                 if signature then
 
-                                    self.redis:hmset("wiSes" .. regId .. "Challenge", challenge)
-                                    self.redis:hmset("wiSes" .. regId .. "Challenge", "signature", signature)
+                                    self.redis:hmset("wiSes" .. regIdStr .. "Challenge", challenge)
+                                    self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "signature", signature)
 
                                     -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
                                     self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challengeString } })
@@ -328,7 +334,7 @@ function _M:receiveData(regId, data)
                     session.isWampEstablished = 1
                     session.realm = realm
                     session.wampFeatures = json.encode(dataObj[3])
-                    self.redis:hmset("wiSes" .. regId, session)
+                    self.redis:hmset("wiSes" .. regIdStr, session)
 
                     if self.redis:sismember("wiolaRealms",realm) == 0 then
                         ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
@@ -355,7 +361,7 @@ function _M:receiveData(regId, data)
         else
 
             local config = self:config()
-            local challenge = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regId .. "Challenge"))
+            local challenge = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regIdStr .. "Challenge"))
             local authInfo
 
             if config.wampCRA.authType == "static" then
@@ -378,7 +384,7 @@ function _M:receiveData(regId, data)
                 session.isWampEstablished = 1
                 session.realm = challenge.realm
                 session.wampFeatures = challenge.wampFeatures
-                self.redis:hmset("wiSes" .. regId, session)
+                self.redis:hmset("wiSes" .. regIdStr, session)
 
                 if self.redis:sismember("wiolaRealms",challenge.realm) == 0 then
                     ngx.log(ngx.DEBUG, "No realm ", challenge.realm, " found. Creating...")
@@ -403,7 +409,7 @@ function _M:receiveData(regId, data)
         end
 
         -- Clean up Challenge data in any case
-        self.redis:del("wiSes" .. regId .. "Challenge")
+        self.redis:del("wiSes" .. regIdStr .. "Challenge")
 
     elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then   -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         -- No response is expected
@@ -423,8 +429,9 @@ function _M:receiveData(regId, data)
                 -- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list]
                 -- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
-                local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. dataObj[3]))
-                local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. invoc.callerSesId))
+                local invocReqId = formatNumber(dataObj[3])
+                local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. invocReqId))
+                local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(invoc.callerSesId)))
                 invoc.CallReqId = tonumber(invoc.CallReqId)
 
                 if #dataObj == 6 then
@@ -438,7 +445,7 @@ function _M:receiveData(regId, data)
                     self:_putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, setmetatable({}, { __jsontype = 'object' }), dataObj[5] })
                 end
 
-                self.redis:del("wiInvoc" .. dataObj[3])
+                self.redis:del("wiInvoc" .. invocReqId)
             end
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
@@ -449,8 +456,8 @@ function _M:receiveData(regId, data)
             if self:_validateURI(dataObj[4]) then
                 local pubId = self:_getRegId()
                 local ss = {}
-                local tmpK = "wiSes" .. regId .. "TmpSetK"
-                local tmpL = "wiSes" .. regId .. "TmpSetL"
+                local tmpK = "wiSes" .. regIdStr .. "TmpSetK"
+                local tmpL = "wiSes" .. regIdStr .. "TmpSetL"
 
                 self.redis:sdiffstore(tmpK, "wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
 
@@ -468,7 +475,7 @@ function _M:receiveData(regId, data)
                     ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authid list")
 
                     for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
 
                         for i=1, #dataObj[3].eligible_authid do
                             if s.wampFeatures.authid == dataObj[3].eligible_authid[i] then
@@ -485,7 +492,7 @@ function _M:receiveData(regId, data)
                     ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authrole list")
 
                     for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
 
                         for i=1, #dataObj[3].eligible_authrole do
                             if s.wampFeatures.authrole == dataObj[3].eligible_authrole[i] then
@@ -512,7 +519,7 @@ function _M:receiveData(regId, data)
                     ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authid list")
 
                     for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
 
                         for i=1, #dataObj[3].exclude_authid do
                             if s.wampFeatures.authid == dataObj[3].exclude_authid[i] then
@@ -529,7 +536,7 @@ function _M:receiveData(regId, data)
                     ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authrole list")
 
                     for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. v))
+                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
 
                         for i=1, #dataObj[3].exclude_authrole do
                             if s.wampFeatures.authrole == dataObj[3].exclude_authrole[i] then
@@ -627,7 +634,8 @@ function _M:receiveData(regId, data)
                 else
                     local regInfo = self.redis:array_to_hash(self.redis:hgetall("wiRPC" .. dataObj[4]))
                     local callee = tonumber(regInfo.calleeSesId)
-                    local tmpK = "wiSes" .. regId .. "TmpSet"
+                    local tmpK = "wiSes" .. regIdStr .. "TmpSet"
+                    local callReqIdStr = formatNumber(dataObj[2])
 
                     local details = setmetatable({}, { __jsontype = 'object' })
 
@@ -643,8 +651,8 @@ function _M:receiveData(regId, data)
                         details.receive_progress = true
                     end
 
-                    local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. callee))
-                    local rpcRegId = tonumber(self.redis:hget("wiSes" .. callee .. "RPCs", dataObj[4]))
+                    local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(callee)))
+                    local rpcRegId = tonumber(self.redis:hget("wiSes" .. formatNumber(callee) .. "RPCs", dataObj[4]))
                     local invReqId = self:_getRegId()
 
                     if dataObj[3].timeout ~= nil and
@@ -668,9 +676,9 @@ function _M:receiveData(regId, data)
                         end
                     end
 
-                    self.redis:hmset("wiCall" .. dataObj[2], "callerSesId", session.sessId, "calleeSesId", calleeSess.sessId, "wiInvocId", invReqId)
-                    invReqId = tonumber(self.redis:hget("wiCall" .. dataObj[2], "wiInvocId"))
-                    self.redis:hmset("wiInvoc" .. invReqId, "CallReqId", dataObj[2], "callerSesId", regId)
+                    self.redis:hmset("wiCall" .. callReqIdStr, "callerSesId", session.sessId, "calleeSesId", calleeSess.sessId, "wiInvocId", invReqId)
+                    invReqId = tonumber(self.redis:hget("wiCall" .. callReqIdStr, "wiInvocId"))
+                    self.redis:hmset("wiInvoc" .. formatNumber(invReqId), "CallReqId", dataObj[2], "callerSesId", regId)
 
                     if #dataObj == 5 then
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
@@ -702,9 +710,9 @@ function _M:receiveData(regId, data)
                     if dataObj[3].disclose_caller ~= nil and dataObj[3].disclose_caller == true then
                         self.redis:hmset("wiRPC" .. dataObj[4], "disclose_caller", true)
                     end
-                    self.redis:hset("wiSes" .. regId .. "RPCs", dataObj[4], registrationId)
-                    self.redis:hset("wiSes" .. regId .. "RevRPCs", registrationId, dataObj[4])
-                    registrationId = tonumber(self.redis:hget("wiSes" .. regId .. "RPCs", dataObj[4]))
+                    self.redis:hset("wiSes" .. regIdStr .. "RPCs", dataObj[4], registrationId)
+                    self.redis:hset("wiSes" .. regIdStr .. "RevRPCs", registrationId, dataObj[4])
+                    registrationId = tonumber(self.redis:hget("wiSes" .. regIdStr .. "RPCs", dataObj[4]))
 
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
@@ -717,10 +725,10 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then   -- WAMP SPEC: [UNREGISTER, Request|id, REGISTERED.Registration|id]
         if session.isWampEstablished == 1 then
-            local rpc = self.redis:hget("wiSes" .. regId .. "RevRPCs", dataObj[3])
+            local rpc = self.redis:hget("wiSes" .. regIdStr .. "RevRPCs", dataObj[3])
             if rpc ~= ngx.null then
-                self.redis:hdel("wiSes" .. regId .. "RPCs", rpc)
-                self.redis:hdel("wiSes" .. regId .. "RevRPCs", dataObj[3])
+                self.redis:hdel("wiSes" .. regIdStr .. "RPCs", rpc)
+                self.redis:hdel("wiSes" .. regIdStr .. "RevRPCs", dataObj[3])
                 self.redis:del("wiRPC" .. rpc)
                 self.redis:srem("wiRealm" .. session.realm .. "RPCs",rpc)
 
@@ -737,17 +745,19 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
-            local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. dataObj[2]))
+            local invocReqId = formatNumber(dataObj[2])
+            local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. invocReqId))
             invoc.CallReqId = tonumber(invoc.CallReqId)
-            local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. invoc.callerSesId))
+
+            local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(invoc.callerSesId)))
 
             local details = setmetatable({}, { __jsontype = 'object' })
 
             if dataObj[3].progress ~= nil and dataObj[3].progress == true then
                 details.progress = true
             else
-                self.redis:del("wiInvoc" .. dataObj[2])
-                self.redis:del("wiCall" .. invoc.CallReqId)
+                self.redis:del("wiInvoc" .. invocReqId)
+                self.redis:del("wiCall" .. formatNumber(invoc.CallReqId))
             end
 
             if #dataObj == 4 then
@@ -767,9 +777,9 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [CANCEL, CALL.Request|id, Options|dict]
         if session.isWampEstablished == 1 then
 
-            local wiCall = self.redis:array_to_hash(self.redis:hgetall("wiCall" .. dataObj[2]))
+            local wiCall = self.redis:array_to_hash(self.redis:hgetall("wiCall" .. formatNumber(dataObj[2])))
             wiCall.calleeSesId = tonumber(wiCall.calleeSesId)
-            local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. wiCall.calleeSesId))
+            local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(wiCall.calleeSesId)))
 
             if calleeSess.wampFeatures.callee.features.call_canceling == true then
                 local details = setmetatable({}, { __jsontype = 'object' })
@@ -779,15 +789,13 @@ function _M:receiveData(regId, data)
                 end
 
                 -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
-                self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, wiCall.wiInvocId, details })
+                self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, tonumber(wiCall.wiInvocId), details })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
         end
     else
-
     end
-
 
     ngx.log(ngx.DEBUG, "Exiting receiveData()")
 end
@@ -800,7 +808,7 @@ end
 -- returns first WAMP message from the session data queue
 --
 function _M:getPendingData(regId)
-    return self.redis:lpop("wiSes" .. regId .. "Data")
+    return self.redis:lpop("wiSes" .. formatNumber(regId) .. "Data")
 end
 
 --
@@ -821,10 +829,11 @@ function _M:processPostData(sid, realm, data)
 
     if dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
         local regId, dataType = self.addConnection(sid, nil)
+        local regIdStr = formatNumber(regId)
 
         -- Make a session legal :)
-        self.redis:hset("wiSes" .. regId, "isWampEstablished", 1)
-        self.redis:hset("wiSes" .. regId, "realm", realm)
+        self.redis:hset("wiSes" .. regIdStr, "isWampEstablished", 1)
+        self.redis:hset("wiSes" .. regIdStr, "realm", realm)
 
         self.receiveData(regId, data)
 

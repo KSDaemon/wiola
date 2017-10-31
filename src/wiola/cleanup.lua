@@ -14,9 +14,11 @@ local _M = {}
 --
 function _M.cleanupSession(redis, regId)
 
-    ngx.log(ngx.DEBUG, "Cleaning up session: ", regId)
+    local regIdStr = string.format("%.0f",regId)
 
-    local session = redis:array_to_hash(redis:hgetall("wiSes" .. regId))
+    ngx.log(ngx.DEBUG, "Cleaning up session: ", regIdStr)
+
+    local session = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr))
     session.realm = session.realm or ""
 
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. session.realm .. "Subs"))
@@ -30,24 +32,24 @@ function _M.cleanupSession(redis, regId)
         end
     end
 
-    local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regId .. "RPCs"))
+    local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
     for k, v in pairs(rpcs) do
         redis:srem("wiRealm" .. session.realm .. "RPCs",k)
         redis:del("wiRPC" .. k)
     end
 
-    redis:del("wiSes" .. regId .. "RPCs")
-    redis:del("wiSes" .. regId .. "RevRPCs")
-    redis:del("wiSes" .. regId .. "Challenge")
+    redis:del("wiSes" .. regIdStr .. "RPCs")
+    redis:del("wiSes" .. regIdStr .. "RevRPCs")
+    redis:del("wiSes" .. regIdStr .. "Challenge")
 
     redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
     if redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
         redis:srem("wiolaRealms",session.realm)
     end
 
-    redis:del("wiSes" .. regId .. "Data")
-    redis:del("wiSes" .. regId)
+    redis:del("wiSes" .. regIdStr .. "Data")
+    redis:del("wiSes" .. regIdStr)
     redis:srem("wiolaIds",regId)
 
     ngx.log(ngx.DEBUG, "Session data successfully removed!")
