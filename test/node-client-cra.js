@@ -12,9 +12,11 @@ let ws, d = Date.now();
 console.log('0: Initializing wampy and connecting to server...');
 
 ws = new Wampy('ws://webxp/ws/', {
+    debug: false,
     ws: w3cws,
     realm: 'test',
     authid: 'user1',
+    authmethods: ['wampcra'],
     onChallenge: (method, info) => {
         console.log('Requested challenge with ', method, info);
         return wampyCra.sign('secret1', info.challenge);
