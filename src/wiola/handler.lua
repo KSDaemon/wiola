@@ -30,13 +30,18 @@ ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header
 
 local function removeConnection(premature, sessionId)
 
-    ngx.log(ngx.DEBUG, "removeConnection callback fired!")
+    ngx.log(ngx.DEBUG, "Cleaning up session: ", sessionId)
 
     local config = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
-    local wiola_cleanup = require "wiola.cleanup"
-    wiola_cleanup.cleanupSession(store, sessionId)
 
+    local ok, err = store:init(config.storeConfig)
+    if not ok then
+        ngx.log(ngx.DEBUG, "Can not init datastore!", err)
+    else
+        store:removeSession(sessionId)
+        ngx.log(ngx.DEBUG, "Session data successfully removed!")
+    end
 end
 
 local function removeConnectionWrapper()

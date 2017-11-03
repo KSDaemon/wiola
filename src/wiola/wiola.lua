@@ -634,8 +634,7 @@ function _M:processPostData(sid, realm, data)
             httpCode = ngx.HTTP_OK
         end
 
-        local wiola_cleanup = require "wiola.cleanup"
-        wiola_cleanup.cleanupSession(store, regId)
+        store:removeSession(regId)
     else
         res = serializers.json.encode({ result = false, error = "Message type not supported" })
         httpCode = ngx.HTTP_FORBIDDEN
