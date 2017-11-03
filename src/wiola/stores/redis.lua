@@ -54,7 +54,7 @@ function _M:getRegId()
     repeat
         regId = math.random(max)
     --        regId = math.random(100000000000000)
-    until redis:sismember("wiolaIds", regId)
+    until redis:sismember("wiolaIds", formatNumber(regId))
 
     return regId
 end
@@ -68,7 +68,7 @@ end
 function _M:addSession(regId, session)
 
     session.sessId = formatNumber(session.sessId)
-    redis:sadd("wiolaIds", regId)
+    redis:sadd("wiolaIds", formatNumber(regId))
     redis:hmset("wiSes" .. formatNumber(regId), session)
 
 end
