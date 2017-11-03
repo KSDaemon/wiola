@@ -67,6 +67,7 @@ end
 --
 function _M:addSession(regId, session)
 
+    session.sessId = formatNumber(session.sessId)
     redis:sadd("wiolaIds", regId)
     redis:hmset("wiSes" .. formatNumber(regId), session)
 
@@ -80,6 +81,7 @@ end
 function _M:getSession(regId)
     local session = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId)))
     session.isWampEstablished = tonumber(session.isWampEstablished)
+    session.sessId = tonumber(session.sessId)
     return session
 end
 
@@ -90,7 +92,8 @@ end
 -- session - Session information
 --
 function _M:changeSession(regId, session)
-
+    session.isWampEstablished = formatNumber(session.isWampEstablished)
+    session.sessId = formatNumber(session.sessId)
     redis:hmset("wiSes" .. formatNumber(regId), session)
 
 end
@@ -109,7 +112,7 @@ function _M:removeSession(regId)
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. session.realm .. "Subs"))
 
     for k, v in pairs(subscriptions) do
-        redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regId)
+        redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regIdStr)
         if redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
             redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
             redis:hdel("wiRealm" .. session.realm .. "Subs",k)
@@ -128,14 +131,14 @@ function _M:removeSession(regId)
     redis:del("wiSes" .. regIdStr .. "RevRPCs")
     redis:del("wiSes" .. regIdStr .. "Challenge")
 
-    redis:srem("wiRealm" .. session.realm .. "Sessions", regId)
+    redis:srem("wiRealm" .. session.realm .. "Sessions", regIdStr)
     if redis:scard("wiRealm" .. session.realm .. "Sessions") == 0 then
         redis:srem("wiolaRealms",session.realm)
     end
 
     redis:del("wiSes" .. regIdStr .. "Data")
     redis:del("wiSes" .. regIdStr)
-    redis:srem("wiolaIds",regId)
+    redis:srem("wiolaIds",regIdStr)
 end
 
 -- Prepare data for sending to client
@@ -144,10 +147,6 @@ end
 -- data - data for client
 --
 function _M:putData(session, data)
-
-    local getdump = require("debug.vardump").getdump
-    ngx.log(ngx.DEBUG, "Data for client to push to redis: ", getdump(data))
-
     redis:rpush("wiSes" .. formatNumber(session.sessId) .. "Data", data)
 end
 
@@ -166,7 +165,9 @@ end
 -- regId - session registration Id
 --
 function _M:getChallenge(regId)
-    return redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId) .. "Challenge"))
+    local challenge = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId) .. "Challenge"))
+    challenge.session = tonumber(challenge.session)
+    return challenge
 end
 
 --
@@ -176,6 +177,9 @@ end
 -- challenge - Challenge information
 --
 function _M:changeChallenge(regId, challenge)
+    if challenge.session then
+        challenge.session = formatNumber(challenge.session)
+    end
     redis:hmset("wiSes" .. formatNumber(regId) .. "Challenge", challenge)
 end
 
@@ -200,7 +204,7 @@ function _M:addSessionToRealm(regId, realm)
         ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
         redis:sadd("wiolaRealms", realm)
     end
-    redis:sadd("wiRealm" .. realm .. "Sessions", regId)
+    redis:sadd("wiRealm" .. realm .. "Sessions", formatNumber(regId))
 
 end
 
@@ -226,12 +230,12 @@ function _M:subscribeSession(realm, uri, regId)
 
     if not subscriptionId then
         subscriptionId = self:getRegId()
-        redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionId)
-        redis:hset("wiRealm" .. realm .. "RevSubs", subscriptionId, uri)
-        subscriptionId = tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
+        local subscriptionIdStr = formatNumber(subscriptionId)
+        redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
+        redis:hset("wiRealm" .. realm .. "RevSubs", subscriptionIdStr, uri)
     end
 
-    redis:sadd("wiRealm" .. realm .. "Sub" .. uri .. "Sessions", regId)
+    redis:sadd("wiRealm" .. realm .. "Sub" .. uri .. "Sessions", formatNumber(regId))
 
     return subscriptionId
 end
@@ -246,14 +250,16 @@ end
 -- Returns flag was session subscribed to requested topic
 --
 function _M:unsubscribeSession(realm, subscId, regId)
-    local subscr = redis:hget("wiRealm" .. realm .. "RevSubs", subscId)
-    local isSesSubscrbd = redis:sismember("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regId)
+    local subscIdStr = formatNumber(subscId)
+    local regIdStr = formatNumber(regId)
+    local subscr = redis:hget("wiRealm" .. realm .. "RevSubs", subscIdStr)
+    local isSesSubscrbd = redis:sismember("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regIdStr)
 
-    redis:srem("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regId)
+    redis:srem("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regIdStr)
     if redis:scard("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions") == 0 then
         redis:del("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions")
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
-        redis:hdel("wiRealm" .. realm .. "RevSubs", subscId)
+        redis:hdel("wiRealm" .. realm .. "RevSubs", subscIdStr)
     end
 
     return isSesSubscrbd
@@ -279,7 +285,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.eligible then -- There is eligible list
         ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
         for k, v in ipairs(options.eligible) do
-            redis:sadd(tmpL, v)
+            redis:sadd(tmpL, formatNumber(v))
         end
 
         redis:sinterstore(tmpK, tmpK, tmpL)
@@ -294,7 +300,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
             for i = 1, #options.eligible_authid do
                 if s.wampFeatures.authid == options.eligible_authid[i] then
-                    redis:sadd(tmpL, s.sessId)
+                    redis:sadd(tmpL, formatNumber(s.sessId))
                 end
             end
         end
@@ -311,7 +317,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
             for i = 1, #options.eligible_authrole do
                 if s.wampFeatures.authrole == options.eligible_authrole[i] then
-                    redis:sadd(tmpL, s.sessId)
+                    redis:sadd(tmpL, formatNumber(s.sessId))
                 end
             end
         end
@@ -323,7 +329,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.exclude then -- There is exclude list
         ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
         for k, v in ipairs(options.exclude) do
-            redis:sadd(tmpL, v)
+            redis:sadd(tmpL, formatNumber(v))
         end
 
         redis:sdiffstore(tmpK, tmpK, tmpL)
@@ -338,7 +344,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
             for i = 1, #options.exclude_authid do
                 if s.wampFeatures.authid == options.exclude_authid[i] then
-                    redis:sadd(tmpL, s.sessId)
+                    redis:sadd(tmpL, formatNumber(s.sessId))
                 end
             end
         end
@@ -355,7 +361,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
             for i = 1, #options.exclude_authrole do
                 if s.wampFeatures.authrole == options.exclude_authrole[i] then
-                    redis:sadd(tmpL, s.sessId)
+                    redis:sadd(tmpL, formatNumber(s.sessId))
                 end
             end
         end
@@ -401,7 +407,7 @@ function _M:removeSubscription(regId)
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. subscription.realm .. "Subs"))
 
     for k, v in pairs(subscriptions) do
-        redis:srem("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions", regId)
+        redis:srem("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions", regIdStr)
         if redis:scard("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions") == 0 then
             redis:del("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions")
             redis:hdel("wiRealm" .. subscription.realm .. "Subs",k)
@@ -420,14 +426,14 @@ function _M:removeSubscription(regId)
     redis:del("wiSes" .. regIdStr .. "RevRPCs")
     redis:del("wiSes" .. regIdStr .. "Challenge")
 
-    redis:srem("wiRealm" .. subscription.realm .. "Subscriptions", regId)
+    redis:srem("wiRealm" .. subscription.realm .. "Subscriptions", regIdStr)
     if redis:scard("wiRealm" .. subscription.realm .. "Subscriptions") == 0 then
         redis:srem("wiolaRealms",subscription.realm)
     end
 
     redis:del("wiSes" .. regIdStr .. "Data")
     redis:del("wiSes" .. regIdStr)
-    redis:srem("wiolaIds",regId)
+    redis:srem("wiolaIds",regIdStr)
 end
 
 --
@@ -452,21 +458,22 @@ end
 -- regId - session registration Id
 --
 function _M:registerSessionRPC(realm, uri, options, regId)
-    local registrationId
+    local registrationId, registrationIdStr
     local regIdStr = formatNumber(regId)
 
     if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
-        local registrationId = self:getRegId()
+        registrationId = self:getRegId()
+        registrationIdStr = formatNumber(registrationId)
 
         redis:sadd("wiRealm" .. realm .. "RPCs", uri)
-        redis:hmset("wiRealm" .. realm .. "RPC" .. uri, "calleeSesId", regId, "registrationId", registrationId)
+        redis:hmset("wiRealm" .. realm .. "RPC" .. uri, "calleeSesId", regIdStr, "registrationId", registrationIdStr)
 
         if options.disclose_caller ~= nil and options.disclose_caller == true then
             redis:hmset("wiRPC" .. uri, "disclose_caller", true)
         end
 
-        redis:hset("wiSes" .. regIdStr .. "RPCs", uri, registrationId)
-        redis:hset("wiSes" .. regIdStr .. "RevRPCs", registrationId, uri)
+        redis:hset("wiSes" .. regIdStr .. "RPCs", uri, registrationIdStr)
+        redis:hset("wiSes" .. regIdStr .. "RevRPCs", registrationIdStr, uri)
     end
 
     return registrationId
@@ -483,11 +490,12 @@ end
 --
 function _M:unregisterSessionRPC(realm, registrationId, regId)
     local regIdStr = formatNumber(regId)
+    local registrationIdStr = formatNumber(registrationId)
 
-    local rpc = redis:hget("wiSes" .. regIdStr .. "RevRPCs", registrationId)
+    local rpc = redis:hget("wiSes" .. regIdStr .. "RevRPCs", registrationIdStr)
     if rpc ~= ngx.null then
         redis:hdel("wiSes" .. regIdStr .. "RPCs", rpc)
-        redis:hdel("wiSes" .. regIdStr .. "RevRPCs", registrationId)
+        redis:hdel("wiSes" .. regIdStr .. "RevRPCs", registrationIdStr)
         redis:del("wiRealm" .. realm .. "RPC" .. rpc)
         redis:srem("wiRealm" .. realm .. "RPCs", rpc)
     end
@@ -554,32 +562,5 @@ function _M:addCallInvocation(callReqId, callerSessId, invocReqId, calleeSessId)
     redis:hmset("wiCall" .. callReqIdStr, "callerSesId", callerSessIdStr, "calleeSesId", calleeSessIdStr, "wiInvocId", invocReqIdStr)
     redis:hmset("wiInvoc" .. invocReqIdStr, "CallReqId", callReqIdStr, "callerSesId", callerSessIdStr)
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 return _M
