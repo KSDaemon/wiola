@@ -7,7 +7,7 @@
 
 
 local _M = {
-    _VERSION = '0.7.0',
+    _VERSION = '0.8.0',
 }
 
 _M.__index = _M
@@ -39,11 +39,12 @@ local wamp_features = {
     }
 }
 
-local wiola_config = require "wiola.config"
+local config = require("wiola.config").config()
 local serializers = {
-    json = require('wiola.json_serializer'),
-    msgpack = require('wiola.msgpack_serializer')
+    json = require('wiola.serializers.json_serializer'),
+    msgpack = require('wiola.serializers.msgpack_serializer')
 }
+local store = require('wiola.stores.' .. config.store)
 
 local WAMP_MSG_SPEC = {
     HELLO = 1,
@@ -83,11 +84,6 @@ local has = function(tab, val)
     return false
 end
 
--- Format NUMBER for using in strings
-local formatNumber = function(n)
-    return string.format("%.0f", n)
-end
-
 --
 -- Create a new instance
 --
@@ -95,24 +91,13 @@ end
 --
 function _M.new()
     local self = setmetatable({}, _M)
+    local ok, err = store:init(config.storeConfig)
+    if not ok then
+        return ok, err
+    end
+
     return self
-end
 
--- Generate unique Id
-function _M:_getRegId()
-    local regId
-    local max = 2 ^ 53
-    local time = self.redis:time()
-
-    --    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
-    math.randomseed(time[1] * 1000000 + time[2])
-
-    repeat
-        regId = math.random(max)
-    --        regId = math.random(100000000000000)
-    until self.redis:sismember("wiolaIds", regId)
-
-    return regId
 end
 
 -- Generate a random string
@@ -140,41 +125,6 @@ function _M:_validateURI(uri)
 end
 
 --
--- Get or set Wiola Runtime configuration
---
--- see wiola/config.lua:config() for specification
---
-function _M:config(config)
-    return wiola_config.config(config)
-end
-
---
--- Setup Redis connection
---
--- returns connection flag, error description
---
-function _M:setupRedis()
-    local redisOk, redisErr
-
-    local redisLib = require "resty.redis"
-    self.redis = redisLib:new()
-
-    local conf = self:config()
-
-    if conf.redis.port == nil then
-        redisOk, redisErr = self.redis:connect(conf.redis.host)
-    else
-        redisOk, redisErr = self.redis:connect(conf.redis.host, conf.redis.port)
-    end
-
-    if redisOk and conf.redis.db ~= nil then
-        self.redis:select(conf.redis.db)
-    end
-
-    return redisOk, redisErr
-end
-
---
 -- Add connection to wiola
 --
 -- sid - nginx session connection ID
@@ -183,10 +133,8 @@ end
 -- returns WAMP session registration ID, connection data type
 --
 function _M:addConnection(sid, wampProto)
-    local regId = self:_getRegId()
-    local wProto, dataType
-
-    self.redis:sadd("wiolaIds", regId)
+    local regId = store:getRegId()
+    local wProto, dataType, session
 
     if wampProto == nil or wampProto == "" then
         wampProto = 'wamp.2.json' -- Setting default protocol for encoding/decodig use
@@ -198,17 +146,16 @@ function _M:addConnection(sid, wampProto)
         dataType = 'text'
     end
 
-    self.redis:hmset("wiSes" .. formatNumber(regId),
-        {
-            connId = sid,
-            sessId = regId,
-            isWampEstablished = 0,
-            --        realm = nil,
-            --        wamp_features = nil,
-            wamp_protocol = wampProto,
-            encoding = string.match(wampProto, '.*%.([^.]+)$'),
-            dataType = dataType
-        })
+    store:addSession(regId, {
+        connId = sid,
+        sessId = regId,
+        isWampEstablished = 0,
+        --        realm = nil,
+        --        wamp_features = nil,
+        wamp_protocol = wampProto,
+        encoding = string.match(wampProto, '.*%.([^.]+)$'),
+        dataType = dataType
+    })
 
     return regId, dataType
 end
@@ -216,11 +163,11 @@ end
 -- Prepare data for sending to client
 function _M:_putData(session, data)
     local dataObj = serializers[session.encoding].encode(data)
-    self.redis:rpush("wiSes" .. formatNumber(session.sessId) .. "Data", dataObj)
+    store:putData(session, dataObj)
 end
 
 -- Publish event to sessions
-function _M:_publishEvent(sessIds, subId, pubId, details, args, argsKW)
+function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
@@ -234,8 +181,8 @@ function _M:_publishEvent(sessIds, subId, pubId, details, args, argsKW)
         data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW }
     end
 
-    for k, v in ipairs(sessIds) do
-        local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
+    for k, v in ipairs(sessRegIds) do
+        local session = store:getSession(v)
         self:_putData(session, data)
     end
 end
@@ -247,10 +194,7 @@ end
 -- data - data, received through websocket
 --
 function _M:receiveData(regId, data)
-    local regIdStr = formatNumber(regId)
-    local session = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regIdStr))
-    session.isWampEstablished = tonumber(session.isWampEstablished)
-    local json = require "rapidjson" -- needed for WAMP-CRA
+    local session = store:getSession(regId)
 
     local dataObj = serializers[session.encoding].decode(data)
 
@@ -264,15 +208,13 @@ function _M:receiveData(regId, data)
             local realm = dataObj[2]
             if self:_validateURI(realm) then
 
-                local config = self:config()
                 if config.wampCRA.authType ~= "none" then
 
                     if dataObj[3].authmethods and has(dataObj[3].authmethods, "wampcra") and dataObj[3].authid then
 
                         local challenge, challengeString, signature
 
-                        self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "realm", realm)
-                        self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "wampFeatures", json.encode(dataObj[3]))
+                        store:changeChallenge(regId, { realm = realm, wampFeatures = serializers.json.encode(dataObj[3]) })
 
                         if config.wampCRA.authType == "static" then
 
@@ -288,7 +230,7 @@ function _M:receiveData(regId, data)
                                     session = regId
                                 }
 
-                                challengeString = json.encode(challenge)
+                                challengeString = serializers.json.encode(challenge)
 
                                 local hmac = require "resty.hmac"
                                 local hm, err = hmac:new(config.wampCRA.staticCredentials[dataObj[3].authid].secret)
@@ -297,8 +239,8 @@ function _M:receiveData(regId, data)
 
                                 if signature then
 
-                                    self.redis:hmset("wiSes" .. regIdStr .. "Challenge", challenge)
-                                    self.redis:hmset("wiSes" .. regIdStr .. "Challenge", "signature", signature)
+                                    challenge.signature = signature
+                                    store:changeChallenge(regId, challenge)
 
                                     -- WAMP SPEC: [CHALLENGE, AuthMethod|string, Extra|dict]
                                     self:_putData(session, { WAMP_MSG_SPEC.CHALLENGE, "wampcra", { challenge = challengeString } })
@@ -327,14 +269,9 @@ function _M:receiveData(regId, data)
 
                     session.isWampEstablished = 1
                     session.realm = realm
-                    session.wampFeatures = json.encode(dataObj[3])
-                    self.redis:hmset("wiSes" .. regIdStr, session)
-
-                    if self.redis:sismember("wiolaRealms", realm) == 0 then
-                        self.redis:sadd("wiolaRealms", realm)
-                    end
-
-                    self.redis:sadd("wiRealm" .. realm .. "Sessions", regId)
+                    session.wampFeatures = serializers.json.encode(dataObj[3])
+                    store:changeSession(regId, session)
+                    store:addSessionToRealm(regId, realm)
 
                     -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
                     self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
@@ -352,8 +289,7 @@ function _M:receiveData(regId, data)
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
         else
 
-            local config = self:config()
-            local challenge = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. regIdStr .. "Challenge"))
+            local challenge = store:getChallenge(regId)
             local authInfo
 
             if config.wampCRA.authType == "static" then
@@ -376,13 +312,8 @@ function _M:receiveData(regId, data)
                 session.isWampEstablished = 1
                 session.realm = challenge.realm
                 session.wampFeatures = challenge.wampFeatures
-                self.redis:hmset("wiSes" .. regIdStr, session)
-
-                if self.redis:sismember("wiolaRealms", challenge.realm) == 0 then
-                    self.redis:sadd("wiolaRealms", challenge.realm)
-                end
-
-                self.redis:sadd("wiRealm" .. challenge.realm .. "Sessions", regId)
+                store:changeSession(regId, session)
+                store:addSessionToRealm(regId, challenge.realm)
 
                 local details = wamp_features
                 details.authid = authInfo.authid
@@ -400,7 +331,7 @@ function _M:receiveData(regId, data)
         end
 
         -- Clean up Challenge data in any case
-        self.redis:del("wiSes" .. regIdStr .. "Challenge")
+        store:removeChallenge(regId)
 
     elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         -- No response is expected
@@ -420,10 +351,8 @@ function _M:receiveData(regId, data)
                 -- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list]
                 -- WAMP SPEC: [ERROR, INVOCATION, INVOCATION.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]
 
-                local invocReqId = formatNumber(dataObj[3])
-                local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. invocReqId))
-                local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(invoc.callerSesId)))
-                invoc.CallReqId = tonumber(invoc.CallReqId)
+                local invoc = store:getInvocation(dataObj[3])
+                local callerSess = store:getSession(invoc.callerSesId)
 
                 if #dataObj == 6 then
                     -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -436,7 +365,7 @@ function _M:receiveData(regId, data)
                     self:_putData(callerSess, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, invoc.CallReqId, setmetatable({}, { __jsontype = 'object' }), dataObj[5] })
                 end
 
-                self.redis:del("wiInvoc" .. invocReqId)
+                store:removeInvocation(dataObj[3])
             end
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
@@ -445,113 +374,17 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                local pubId = self:_getRegId()
-                local ss = {}
-                local tmpK = "wiSes" .. regIdStr .. "TmpSetK"
-                local tmpL = "wiSes" .. regIdStr .. "TmpSetL"
-
-                self.redis:sdiffstore(tmpK, "wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions")
-
-                if dataObj[3].eligible then -- There is eligible list
-                    for k, v in ipairs(dataObj[3].eligible) do
-                        self.redis:sadd(tmpL, v)
-                    end
-
-                    self.redis:sinterstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].eligible_authid then -- There is eligible authid list
-
-                    for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
-
-                        for i = 1, #dataObj[3].eligible_authid do
-                            if s.wampFeatures.authid == dataObj[3].eligible_authid[i] then
-                                self.redis:sadd(tmpL, s.sessId)
-                            end
-                        end
-                    end
-
-                    self.redis:sinterstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].eligible_authrole then -- There is eligible authrole list
-
-                    for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
-
-                        for i = 1, #dataObj[3].eligible_authrole do
-                            if s.wampFeatures.authrole == dataObj[3].eligible_authrole[i] then
-                                self.redis:sadd(tmpL, s.sessId)
-                            end
-                        end
-                    end
-
-                    self.redis:sinterstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].exclude then -- There is exclude list
-                    for k, v in ipairs(dataObj[3].exclude) do
-                        self.redis:sadd(tmpL, v)
-                    end
-
-                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].exclude_authid then -- There is exclude authid list
-
-                    for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
-
-                        for i = 1, #dataObj[3].exclude_authid do
-                            if s.wampFeatures.authid == dataObj[3].exclude_authid[i] then
-                                self.redis:sadd(tmpL, s.sessId)
-                            end
-                        end
-                    end
-
-                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].exclude_authrole then -- There is exclude authrole list
-
-                    for k, v in ipairs(self.redis:smembers(tmpK)) do
-                        local s = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(v)))
-
-                        for i = 1, #dataObj[3].exclude_authrole do
-                            if s.wampFeatures.authrole == dataObj[3].exclude_authrole[i] then
-                                self.redis:sadd(tmpL, s.sessId)
-                            end
-                        end
-                    end
-
-                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                if dataObj[3].exclude_me == nil or dataObj[3].exclude_me == true then
-                    self.redis:sadd(tmpL, regId)
-                    self.redis:sdiffstore(tmpK, tmpK, tmpL)
-                    self.redis:del(tmpL)
-                end
-
-                ss = self.redis:smembers(tmpK)
-                self.redis:del(tmpK)
-
+                local pubId = store:getRegId()
+                local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, dataObj[3])
                 local details = {}
 
                 if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
                     details.publisher = regId
                 end
 
-                local subId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
+                local subId = store:getSubscriptionId(session.realm, dataObj[4])
                 if subId then
-                    self:_publishEvent(ss, subId, pubId, details, dataObj[5], dataObj[6])
+                    self:_publishEvent(recipients, subId, pubId, details, dataObj[5], dataObj[6])
 
                     if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
                         -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
@@ -567,16 +400,7 @@ function _M:receiveData(regId, data)
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                local subscriptionId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
-
-                if not subscriptionId then
-                    subscriptionId = self:_getRegId()
-                    self.redis:hset("wiRealm" .. session.realm .. "Subs", dataObj[4], subscriptionId)
-                    self.redis:hset("wiRealm" .. session.realm .. "RevSubs", subscriptionId, dataObj[4])
-                    subscriptionId = tonumber(self.redis:hget("wiRealm" .. session.realm .. "Subs", dataObj[4]))
-                end
-
-                self.redis:sadd("wiRealm" .. session.realm .. "Sub" .. dataObj[4] .. "Sessions", regId)
+                local subscriptionId = store:subscribeSession(session.realm, dataObj[4], regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
@@ -588,16 +412,8 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then -- WAMP SPEC: [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
         if session.isWampEstablished == 1 then
-            local subscr = self.redis:hget("wiRealm" .. session.realm .. "RevSubs", dataObj[3])
-            local isSesSubscrbd = self.redis:sismember("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions", regId)
+            local isSesSubscrbd = store:unsubscribeSession(session.realm, dataObj[3], regId)
             if isSesSubscrbd ~= ngx.null then
-                self.redis:srem("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions", regId)
-                if self.redis:scard("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions") == 0 then
-                    self.redis:del("wiRealm" .. session.realm .. "Sub" .. subscr .. "Sessions")
-                    self.redis:hdel("wiRealm" .. session.realm .. "Subs", subscr)
-                    self.redis:hdel("wiRealm" .. session.realm .. "RevSubs", dataObj[3])
-                end
-
                 -- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNSUBSCRIBED, dataObj[2] })
             else
@@ -612,22 +428,19 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                if self.redis:sismember("wiRealm" .. session.realm .. "RPCs", dataObj[4]) == 0 then
+
+                local rpcInfo = store:getRPC(session.realm, dataObj[4])
+
+                if not rpcInfo then
                     -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
                     self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_suitable_callee" })
                 else
-                    local regInfo = self.redis:array_to_hash(self.redis:hgetall("wiRPC" .. dataObj[4]))
-                    local callee = tonumber(regInfo.calleeSesId)
-                    local tmpK = "wiSes" .. regIdStr .. "TmpSet"
-                    local callReqIdStr = formatNumber(dataObj[2])
-
                     local details = setmetatable({}, { __jsontype = 'object' })
 
-                    local conf = self:config()
-                    if conf.callerIdentification == "always" or
-                            (conf.callerIdentification == "auto" and
+                    if config.callerIdentification == "always" or
+                            (config.callerIdentification == "auto" and
                                     ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
-                                            (regInfo.disclose_caller == true))) then
+                                            (rpcInfo.disclose_caller == true))) then
                         details.caller = regId
                     end
 
@@ -635,9 +448,8 @@ function _M:receiveData(regId, data)
                         details.receive_progress = true
                     end
 
-                    local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(callee)))
-                    local rpcRegId = tonumber(self.redis:hget("wiSes" .. formatNumber(callee) .. "RPCs", dataObj[4]))
-                    local invReqId = self:_getRegId()
+                    local calleeSess = store:getSession(rpcInfo.calleeSesId)
+                    local invReqId = store:getRegId()
 
                     if dataObj[3].timeout ~= nil and
                             dataObj[3].timeout > 0 and
@@ -659,19 +471,17 @@ function _M:receiveData(regId, data)
                         end
                     end
 
-                    self.redis:hmset("wiCall" .. callReqIdStr, "callerSesId", session.sessId, "calleeSesId", calleeSess.sessId, "wiInvocId", invReqId)
-                    invReqId = tonumber(self.redis:hget("wiCall" .. callReqIdStr, "wiInvocId"))
-                    self.redis:hmset("wiInvoc" .. formatNumber(invReqId), "CallReqId", dataObj[2], "callerSesId", regId)
+                    store:addCallInvocation(dataObj[2], session.sessId, invReqId, calleeSess.sessId)
 
                     if #dataObj == 5 then
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]
-                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5] })
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcInfo.registrationId, details, dataObj[5] })
                     elseif #dataObj == 6 then
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]
-                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details, dataObj[5], dataObj[6] })
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcInfo.registrationId, details, dataObj[5], dataObj[6] })
                     else
                         -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
-                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcRegId, details })
+                        self:_putData(calleeSess, { WAMP_MSG_SPEC.INVOCATION, invReqId, rpcInfo.registrationId, details })
                     end
                 end
             else
@@ -683,20 +493,12 @@ function _M:receiveData(regId, data)
     elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                if self.redis:sismember("wiRealm" .. session.realm .. "RPCs", dataObj[4]) == 1 then
+
+                local registrationId = store:registerSessionRPC(session.realm, dataObj[4], dataObj[3], regId)
+
+                if not registrationId then
                     self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.procedure_already_exists" })
                 else
-                    local registrationId = self:_getRegId()
-
-                    self.redis:sadd("wiRealm" .. session.realm .. "RPCs", dataObj[4])
-                    self.redis:hmset("wiRPC" .. dataObj[4], "calleeSesId", regId)
-                    if dataObj[3].disclose_caller ~= nil and dataObj[3].disclose_caller == true then
-                        self.redis:hmset("wiRPC" .. dataObj[4], "disclose_caller", true)
-                    end
-                    self.redis:hset("wiSes" .. regIdStr .. "RPCs", dataObj[4], registrationId)
-                    self.redis:hset("wiSes" .. regIdStr .. "RevRPCs", registrationId, dataObj[4])
-                    registrationId = tonumber(self.redis:hget("wiSes" .. regIdStr .. "RPCs", dataObj[4]))
-
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
                 end
@@ -708,13 +510,10 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then -- WAMP SPEC: [UNREGISTER, Request|id, REGISTERED.Registration|id]
         if session.isWampEstablished == 1 then
-            local rpc = self.redis:hget("wiSes" .. regIdStr .. "RevRPCs", dataObj[3])
-            if rpc ~= ngx.null then
-                self.redis:hdel("wiSes" .. regIdStr .. "RPCs", rpc)
-                self.redis:hdel("wiSes" .. regIdStr .. "RevRPCs", dataObj[3])
-                self.redis:del("wiRPC" .. rpc)
-                self.redis:srem("wiRealm" .. session.realm .. "RPCs", rpc)
 
+            local rpc = store:unregisterSessionRPC(session.realm, dataObj[3], regId)
+
+            if rpc ~= ngx.null then
                 -- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNREGISTERED, dataObj[2] })
             else
@@ -728,19 +527,16 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
-            local invocReqId = formatNumber(dataObj[2])
-            local invoc = self.redis:array_to_hash(self.redis:hgetall("wiInvoc" .. invocReqId))
-            invoc.CallReqId = tonumber(invoc.CallReqId)
 
-            local callerSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(invoc.callerSesId)))
-
+            local invoc = store:getInvocation(dataObj[2])
+            local callerSess = store:getSession(invoc.callerSesId)
             local details = setmetatable({}, { __jsontype = 'object' })
 
             if dataObj[3].progress ~= nil and dataObj[3].progress == true then
                 details.progress = true
             else
-                self.redis:del("wiInvoc" .. invocReqId)
-                self.redis:del("wiCall" .. formatNumber(invoc.CallReqId))
+                store:removeInvocation(dataObj[2])
+                store:removeCall(invoc.CallReqId)
             end
 
             if #dataObj == 4 then
@@ -760,9 +556,8 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [CANCEL, CALL.Request|id, Options|dict]
         if session.isWampEstablished == 1 then
 
-            local wiCall = self.redis:array_to_hash(self.redis:hgetall("wiCall" .. formatNumber(dataObj[2])))
-            wiCall.calleeSesId = tonumber(wiCall.calleeSesId)
-            local calleeSess = self.redis:array_to_hash(self.redis:hgetall("wiSes" .. formatNumber(wiCall.calleeSesId)))
+            local wiCall = store:getCall(dataObj[2])
+            local calleeSess = store:getSession(wiCall.calleeSesId)
 
             if calleeSess.wampFeatures.callee.features.call_canceling == true then
                 local details = setmetatable({}, { __jsontype = 'object' })
@@ -772,7 +567,7 @@ function _M:receiveData(regId, data)
                 end
 
                 -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
-                self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, tonumber(wiCall.wiInvocId), details })
+                self:_putData(calleeSess, { WAMP_MSG_SPEC.INTERRUPT, wiCall.wiInvocId, details })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
@@ -789,7 +584,7 @@ end
 -- returns first WAMP message from the session data queue
 --
 function _M:getPendingData(regId)
-    return self.redis:lpop("wiSes" .. formatNumber(regId) .. "Data")
+    return store:getPendingData(regId)
 end
 
 --
@@ -801,18 +596,18 @@ end
 --
 function _M:processPostData(sid, realm, data)
 
-    local json = require "rapidjson"
-    local dataObj = json.decode(data)
+    local dataObj = serializers.json.decode(data)
     local res
     local httpCode
 
     if dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
         local regId, dataType = self.addConnection(sid, nil)
-        local regIdStr = formatNumber(regId)
 
         -- Make a session legal :)
-        self.redis:hset("wiSes" .. regIdStr, "isWampEstablished", 1)
-        self.redis:hset("wiSes" .. regIdStr, "realm", realm)
+        local session = store:getSession(regId)
+        session.isWampEstablished = 1
+        session.realm = realm
+        store:changeSession(regId, session)
 
         self.receiveData(regId, data)
 
@@ -821,14 +616,13 @@ function _M:processPostData(sid, realm, data)
             res = cliData
             httpCode = ngx.HTTP_FORBIDDEN
         else
-            res = json.encode({ result = true, error = nil })
+            res = serializers.json.encode({ result = true, error = nil })
             httpCode = ngx.HTTP_OK
         end
 
-        local wiola_cleanup = require "wiola.cleanup"
-        wiola_cleanup.cleanupSession(self.redis, regId)
+        store:removeSession(regId)
     else
-        res = json.encode({ result = false, error = "Message type not supported" })
+        res = serializers.json.encode({ result = false, error = "Message type not supported" })
         httpCode = ngx.HTTP_FORBIDDEN
     end
 

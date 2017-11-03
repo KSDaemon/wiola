@@ -12,7 +12,7 @@ module.exports = function(grunt) {
             main: {
                 expand: true,
                 flatten: true,
-                src: 'src/wiola/*.lua',
+                src: 'src/wiola/**/*.lua',
                 dest: 'lib/',
                 options: {
                     process: function (content, srcpath) {

@@ -5,7 +5,6 @@
 --
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
-local wampServer = wiola:new()
 
 local webSocket, err = wsServer:new({
     timeout = tonumber(ngx.var.wiola_socket_timeout, 10) or 100,
@@ -16,8 +15,8 @@ if not webSocket then
     return ngx.exit(444)
 end
 
-local redisOk, redisErr = wampServer:setupRedis()
-if not redisOk then
+local wampServer, err = wiola:new()
+if not wampServer then
     return ngx.exit(444)
 end
 
@@ -25,26 +24,14 @@ local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.hea
 
 local function removeConnection(premature, sessionId)
 
-    local redisOk, redisErr
-    local redisLib = require "resty.redis"
-    local wiola_config = require "wiola.config"
+    local config = require("wiola.config").config()
+    local store = require('wiola.stores.' .. config.store)
 
-    local redis = redisLib:new()
-    local conf = wiola_config.config()
-
-    if conf.redis.port == nil then
-        redisOk, redisErr = redis:connect(conf.redis.host)
+    local ok, err = store:init(config.storeConfig)
+    if not ok then
     else
-        redisOk, redisErr = redis:connect(conf.redis.host, conf.redis.port)
+        store:removeSession(sessionId)
     end
-
-    if redisOk and conf.redis.db ~= nil then
-        redis:select(conf.redis.db)
-    end
-
-    local wiola_cleanup = require "wiola.cleanup"
-    wiola_cleanup.cleanupSession(redis, sessionId)
-
 end
 
 local function removeConnectionWrapper()

@@ -7,7 +7,7 @@
 local getdump = require("debug.vardump").getdump
 
 local _M = {
-    _VERSION = '0.7.0',
+    _VERSION = '0.8.0',
 }
 
 _M.__index = _M

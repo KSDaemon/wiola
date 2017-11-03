@@ -4,16 +4,36 @@
 -- Date: 01.11.16
 --
 
+--[[
+-- Config examples
+local storeConfigs = {
+    -- Redis connection configuration
+    redis = {
+        host = "unix:///tmp/redis.sock",
+        port = nil,
+        db = nil
+    },
 
--- Redis connection configuration
-local redisConf = {
-    host = "unix:///tmp/redis.sock",
-    port = nil,
-    db = nil
+    -- Postgres connection configuration
+    postgres = {
+    --    host = "unix:///var/run/postgresql/.s.PGSQL.5432",
+        host = "127.0.0.1",
+        port = 5432,
+        db = "wiola",
+        user="admin",
+        password="123456"
+    }
 }
+]]--
 
 -- Wiola Runtime configuration
 local wiolaConf = {
+    store = "redis",
+    storeConfig = {
+        host = "unix:///tmp/redis.sock",
+        port = nil,
+        db = nil
+    },
     callerIdentification = "auto",   -- auto | never | always
     cookieAuth = {
         authType = "none",          -- none | static | dynamic
@@ -39,39 +59,21 @@ local _M = {}
 --
 -- Get or set Wiola Runtime configuration
 --
--- config - Configuration table with possible options:
---          {
---              redis = {
---                  host = string - redis host or unix socket (default: "unix:/tmp/redis.sock"),
---                  port = number - redis port in case of network use (default: nil),
---                  db = number - redis database to select (default: nil)
---              },
---              callerIdentification = string - Disclose caller identification?
---                                              Possible values: auto | never | always. (default: "auto")
---          }
+-- config - Configuration table
 -- without params it just returns current configuration
 --
 function _M.config(config)
 
     if not config then
-        local conf = wiolaConf
-        conf.redis = redisConf
-        return conf
+        return wiolaConf
     end
 
-    if config.redis then
+    if config.store then
+        wiolaConf.store = config.store
+    end
 
-        if config.redis.host ~= nil then
-            redisConf.host = config.redis.host
-        end
-
-        if config.redis.port ~= nil then
-            redisConf.port = config.redis.port
-        end
-
-        if config.redis.db ~= nil then
-            redisConf.db = config.redis.db
-        end
+    if config.storeConfig then
+        wiolaConf.storeConfig = config.storeConfig
     end
 
     if config.callerIdentification ~= nil then
