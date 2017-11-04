@@ -102,16 +102,13 @@ end
 
 -- Generate a random string
 function _M:_randomString(length)
-    local str = "";
-    local time = self.redis:time()
-
-    --    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
-    math.randomseed(time[1] * 1000000 + time[2])
+    local str = {};
+    math.randomseed(math.floor(ngx.now()*1000))
 
     for i = 1, length do
-        str = str .. string.char(math.random(32, 126));
+        str.push(string.char(math.random(32, 126)))
     end
-    return str;
+    return table.concat(str)
 end
 
 -- Validate uri for WAMP requirements
@@ -167,7 +164,7 @@ function _M:_putData(session, data)
 
     ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
     store:putData(session, dataObj)
-    ngx.log(ngx.DEBUG, "Pushed data for client into redis")
+    ngx.log(ngx.DEBUG, "Pushed data for client into store")
 end
 
 -- Publish event to sessions
