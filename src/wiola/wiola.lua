@@ -106,7 +106,7 @@ function _M:_randomString(length)
     math.randomseed(math.floor(ngx.now()*1000))
 
     for i = 1, length do
-        str.push(string.char(math.random(32, 126)))
+        table.insert(str, string.char(math.random(32, 126)))
     end
     return table.concat(str)
 end
