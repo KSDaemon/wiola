@@ -51,6 +51,11 @@ local wiolaConf = {
         --},
         challengeCallback = nil,
         authCallback = nil
+    },
+    metaAPI = {
+        session = false,
+        pubsub = false,
+        rpc = false
     }
 }
 
@@ -115,6 +120,21 @@ function _M.config(config)
 
         if config.wampCRA.authCallback ~= nil then
             wiolaConf.wampCRA.authCallback = config.wampCRA.authCallback
+        end
+    end
+
+    if config.metaAPI then
+
+        if config.metaAPI.session ~= nil then
+            wiolaConf.metaAPI.session = config.metaAPI.session
+        end
+
+        if config.metaAPI.pubsub ~= nil then
+            wiolaConf.metaAPI.pubsub = config.metaAPI.pubsub
+        end
+
+        if config.metaAPI.rpc ~= nil then
+            wiolaConf.metaAPI.rpc = config.metaAPI.rpc
         end
     end
 end

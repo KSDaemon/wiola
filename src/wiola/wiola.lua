@@ -190,6 +190,71 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
     end
 end
 
+-- Publish META event to sessions
+function _M:_publishMetaEvent(part, eventUri, session, ...)
+    if not config.metaAPI[part] then
+        return
+    end
+
+    local subId = store:getSubscriptionId(session.realm, eventUri)
+    if not subId then
+        return
+    end
+    local pubId = store:getRegId()
+    local recipients = store:getTopicSessions(session.realm, eventUri)
+    local argsL, argsKW
+
+    if eventUri == 'wamp.session.on_join' then
+        argsL = {{ session = session.sessId } }
+        local arg = {n = select('#', ...), ...}
+        if arg[1] then
+            argsL[1].authid = arg[1].authid
+            argsL[1].authrole = arg[1].authrole
+            argsL[1].authmethod = arg[1].authmethod
+            argsL[1].authprovider = arg[1].authprovider
+        end
+        argsKW = nil
+    elseif eventUri == 'wamp.session.on_leave' then
+        argsL = {{ session = session.sessId }}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    elseif eventUri == '' then
+        argsL = {}
+        argsKW = nil
+    end
+
+    self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
+end
+
 --
 -- Receive data from client
 --
@@ -209,6 +274,7 @@ function _M:receiveData(regId, data)
             -- Protocol error: received second hello message - aborting
             -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
             local realm = dataObj[2]
             if self:_validateURI(realm) then
@@ -280,6 +346,7 @@ function _M:receiveData(regId, data)
 
                     -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
                     self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, wamp_features })
+                    self:_publishMetaEvent('session', 'wamp.session.on_join', session)
                 end
             else
                 -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
@@ -292,6 +359,7 @@ function _M:receiveData(regId, data)
             -- Protocol error: received second message - aborting
             -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
 
             local challenge = store:getChallenge(regId)
@@ -328,6 +396,7 @@ function _M:receiveData(regId, data)
 
                 -- WAMP SPEC: [WELCOME, Session|id, Details|dict]
                 self:_putData(session, { WAMP_MSG_SPEC.WELCOME, regId, details })
+                self:_publishMetaEvent('session', 'wamp.session.on_join', session, authInfo)
 
             else
                 -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
@@ -346,6 +415,7 @@ function _M:receiveData(regId, data)
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
         end
+        self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
     elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then
         -- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]
         -- WAMP SPEC: [ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]
@@ -402,31 +472,42 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4]) then
-                local subscriptionId = store:subscribeSession(session.realm, dataObj[4], regId)
+                local subscriptionId, isNewSubscription = store:subscribeSession(session.realm, dataObj[4], regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
+                if isNewSubscription then
+                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_create', session)
+                end
+                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_subscribe', session)
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.SUBSCRIBE, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.invalid_uri" })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then -- WAMP SPEC: [UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]
         if session.isWampEstablished == 1 then
-            local isSesSubscrbd = store:unsubscribeSession(session.realm, dataObj[3], regId)
+            local isSesSubscrbd, wasTopicRemoved = store:unsubscribeSession(session.realm, dataObj[3], regId)
             if isSesSubscrbd ~= ngx.null then
                 -- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNSUBSCRIBED, dataObj[2] })
+                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_unsubscribe', session)
+                if wasTopicRemoved then
+                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_delete', session)
+                end
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.UNSUBSCRIBE, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_such_subscription" })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.CALL then
         -- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri]
@@ -496,6 +577,7 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
         if session.isWampEstablished == 1 then
@@ -508,12 +590,16 @@ function _M:receiveData(regId, data)
                 else
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
+                    -- TODO Refactor this in case of implementing shared registrations
+                    self:_publishMetaEvent('rpc', 'wamp.registration.on_create', session)
+                    self:_publishMetaEvent('rpc', 'wamp.registration.on_register', session)
                 end
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.REGISTER, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.invalid_uri" })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then -- WAMP SPEC: [UNREGISTER, Request|id, REGISTERED.Registration|id]
         if session.isWampEstablished == 1 then
@@ -523,11 +609,15 @@ function _M:receiveData(regId, data)
             if rpc ~= ngx.null then
                 -- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNREGISTERED, dataObj[2] })
+                self:_publishMetaEvent('rpc', 'wamp.registration.on_unregister', session)
+                -- TODO Refactor this in case of implementing shared registrations
+                self:_publishMetaEvent('rpc', 'wamp.registration.on_delete', session)
             else
                 self:_putData(session, { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.UNREGISTER, dataObj[2], setmetatable({}, { __jsontype = 'object' }), "wamp.error.no_such_registration" })
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then
         -- WAMP SPEC: [YIELD, INVOCATION.Request|id, Options|dict]
@@ -558,6 +648,7 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.CANCEL then
         -- WAMP SPEC: [CANCEL, CALL.Request|id, Options|dict]
@@ -578,6 +669,7 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
+            self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     else
     end

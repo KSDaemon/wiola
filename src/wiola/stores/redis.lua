@@ -227,9 +227,11 @@ end
 --
 function _M:subscribeSession(realm, uri, regId)
     local subscriptionId = tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
+    local isNewSubscription = false
 
     if not subscriptionId then
         subscriptionId = self:getRegId()
+        isNewSubscription = true
         local subscriptionIdStr = formatNumber(subscriptionId)
         redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
         redis:hset("wiRealm" .. realm .. "RevSubs", subscriptionIdStr, uri)
@@ -237,7 +239,7 @@ function _M:subscribeSession(realm, uri, regId)
 
     redis:sadd("wiRealm" .. realm .. "Sub" .. uri .. "Sessions", formatNumber(regId))
 
-    return subscriptionId
+    return subscriptionId, isNewSubscription
 end
 
 --
@@ -254,15 +256,27 @@ function _M:unsubscribeSession(realm, subscId, regId)
     local regIdStr = formatNumber(regId)
     local subscr = redis:hget("wiRealm" .. realm .. "RevSubs", subscIdStr)
     local isSesSubscrbd = redis:sismember("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regIdStr)
+    local wasTopicRemoved = false
 
     redis:srem("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regIdStr)
     if redis:scard("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions") == 0 then
         redis:del("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions")
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
         redis:hdel("wiRealm" .. realm .. "RevSubs", subscIdStr)
+        wasTopicRemoved = true
     end
 
-    return isSesSubscrbd
+    return isSesSubscrbd, wasTopicRemoved
+end
+
+--
+-- Get sessions subscribed to topic
+--
+-- realm - realm
+-- uri - subscription uri
+--
+function _M:getTopicSessions(realm, uri)
+    return redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
 end
 
 --
