@@ -6,8 +6,8 @@
 
 ngx.header["Server"] = "wiola/Lua v0.6.0"
 
-function has(tab, val)
-    for index, value in ipairs (tab) do
+local has = function(tab, val)
+    for _, value in ipairs (tab) do
         if value == val then
             return true
         end
@@ -26,7 +26,7 @@ if conf.cookieAuth.authType ~= "none" then
     local cookieValue = ngx.unescape_uri(ngx.var["cookie_" .. conf.cookieAuth.cookieName])
 
     if not cookieValue then
-        ngx.log(ngx.ERR, err)
+        ngx.log(ngx.ERR, "No auth cookie found!")
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 

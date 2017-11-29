@@ -122,7 +122,7 @@ function _M:removeSession(regId)
 
     local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
-    for k, v in pairs(rpcs) do
+    for k, _ in pairs(rpcs) do
         redis:srem("wiRealm" .. session.realm .. "RPCs",k)
         redis:del("wiRealm" .. session.realm .. "RPC" .. k)
     end
@@ -290,7 +290,7 @@ end
 function _M:getEventRecipients(realm, uri, regId, options)
 
     local regIdStr = formatNumber(regId)
-    local recipients = {}
+    local recipients
     local tmpK = "wiSes" .. regIdStr .. "TmpSetK"
     local tmpL = "wiSes" .. regIdStr .. "TmpSetL"
 
@@ -298,7 +298,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
     if options.eligible then -- There is eligible list
         ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
-        for k, v in ipairs(options.eligible) do
+        for _, v in ipairs(options.eligible) do
             redis:sadd(tmpL, formatNumber(v))
         end
 
@@ -309,7 +309,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.eligible_authid then -- There is eligible authid list
         ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authid list")
 
-        for k, v in ipairs(redis:smembers(tmpK)) do
+        for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
 
             for i = 1, #options.eligible_authid do
@@ -326,7 +326,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.eligible_authrole then -- There is eligible authrole list
         ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authrole list")
 
-        for k, v in ipairs(redis:smembers(tmpK)) do
+        for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
 
             for i = 1, #options.eligible_authrole do
@@ -342,7 +342,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
     if options.exclude then -- There is exclude list
         ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
-        for k, v in ipairs(options.exclude) do
+        for _, v in ipairs(options.exclude) do
             redis:sadd(tmpL, formatNumber(v))
         end
 
@@ -353,7 +353,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.exclude_authid then -- There is exclude authid list
         ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authid list")
 
-        for k, v in ipairs(redis:smembers(tmpK)) do
+        for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
 
             for i = 1, #options.exclude_authid do
@@ -370,7 +370,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     if options.exclude_authrole then -- There is exclude authrole list
         ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authrole list")
 
-        for k, v in ipairs(redis:smembers(tmpK)) do
+        for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
 
             for i = 1, #options.exclude_authrole do
@@ -431,7 +431,7 @@ function _M:removeSubscription(regId)
 
     local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
-    for k, v in pairs(rpcs) do
+    for k, _ in pairs(rpcs) do
         redis:srem("wiRealm" .. subscription.realm .. "RPCs",k)
         redis:del("wiRPC" .. k)
     end

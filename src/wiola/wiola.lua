@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-local getdump = require("debug.vardump").getdump
+--local getdump = require("debug.vardump").getdump
 
 local _M = {
     _VERSION = '0.8.0',
@@ -75,7 +75,7 @@ local WAMP_MSG_SPEC = {
 
 -- Check for a value in table
 local has = function(tab, val)
-    for index, value in ipairs(tab) do
+    for _, value in ipairs(tab) do
         if value == val then
             return true
         end
@@ -105,7 +105,7 @@ function _M:_randomString(length)
     local str = {};
     math.randomseed(math.floor(ngx.now()*1000))
 
-    for i = 1, length do
+    for _ = 1, length do
         table.insert(str, string.char(math.random(32, 126)))
     end
     return table.concat(str)
@@ -132,7 +132,7 @@ end
 --
 function _M:addConnection(sid, wampProto)
     local regId = store:getRegId()
-    local wProto, dataType, session
+    local dataType
 
     if wampProto == nil or wampProto == "" then
         wampProto = 'wamp.2.json' -- Setting default protocol for encoding/decodig use
@@ -184,7 +184,7 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
         data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW }
     end
 
-    for k, v in ipairs(sessRegIds) do
+    for _, v in ipairs(sessRegIds) do
         local session = store:getSession(v)
         self:_putData(session, data)
     end
@@ -304,9 +304,9 @@ function _M:receiveData(regId, data)
                                 challengeString = serializers.json.encode(challenge)
 
                                 local hmac = require "resty.hmac"
-                                local hm, err = hmac:new(config.wampCRA.staticCredentials[dataObj[3].authid].secret)
+                                local hm = hmac:new(config.wampCRA.staticCredentials[dataObj[3].authid].secret)
 
-                                signature, err = hm:generate_signature("sha256", challengeString)
+                                signature = hm:generate_signature("sha256", challengeString)
 
                                 if signature then
 
@@ -407,7 +407,7 @@ function _M:receiveData(regId, data)
         -- Clean up Challenge data in any case
         store:removeChallenge(regId)
 
-    elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+    -- elseif dataObj[1] == WAMP_MSG_SPEC.ABORT then -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         -- No response is expected
     elseif dataObj[1] == WAMP_MSG_SPEC.GOODBYE then -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
         if session.isWampEstablished == 1 then
@@ -671,7 +671,6 @@ function _M:receiveData(regId, data)
             self:_putData(session, { WAMP_MSG_SPEC.GOODBYE, setmetatable({}, { __jsontype = 'object' }), "wamp.error.system_shutdown" })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
-    else
     end
 
     ngx.log(ngx.DEBUG, "Exiting receiveData()")
@@ -704,7 +703,7 @@ function _M:processPostData(sid, realm, data)
     local httpCode
 
     if dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
-        local regId, dataType = self.addConnection(sid, nil)
+        local regId = self.addConnection(sid, nil)
 
         -- Make a session legal :)
         local session = store:getSession(regId)
@@ -714,7 +713,7 @@ function _M:processPostData(sid, realm, data)
 
         self.receiveData(regId, data)
 
-        local cliData, cliErr = self.getPendingData(regId)
+        local cliData = self.getPendingData(regId)
         if cliData ~= ngx.null then
             res = cliData
             httpCode = ngx.HTTP_FORBIDDEN

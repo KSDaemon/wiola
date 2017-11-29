@@ -5,8 +5,9 @@
 --
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
+local webSocket, wampServer, ok, err
 
-local webSocket, err = wsServer:new({
+webSocket, err = wsServer:new({
     timeout = tonumber(ngx.var.wiola_socket_timeout, 10) or 100,
     max_payload_len = tonumber(ngx.var.wiola_max_payload_len, 10) or 65535
 })
@@ -18,7 +19,7 @@ end
 
 ngx.log(ngx.DEBUG, "Created websocket")
 
-local wampServer, err = wiola:new()
+wampServer, err = wiola:new()
 if not wampServer then
     ngx.log(ngx.DEBUG, "Failed to create a wiola instance: ", err)
     return ngx.exit(444)
@@ -49,7 +50,7 @@ local function removeConnectionWrapper()
     removeConnection(true, sessionId)
 end
 
-local ok, err = ngx.on_abort(removeConnectionWrapper)
+ok, err = ngx.on_abort(removeConnectionWrapper)
 if not ok then
     ngx.log(ngx.ERR, "failed to register the on_abort callback: ", err)
     ngx.exit(444)
@@ -57,9 +58,10 @@ end
 
 while true do
 --    ngx.log(ngx.DEBUG, "Started handler loop!")
+    local cliData, data, typ
 
 --    ngx.log(ngx.DEBUG, "Checking data for client...")
-    local cliData, cliErr = wampServer:getPendingData(sessionId)
+    cliData = wampServer:getPendingData(sessionId)
 
     while cliData ~= ngx.null do
         ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
@@ -74,7 +76,7 @@ while true do
             ngx.log(ngx.ERR, "Failed to send data: ", err)
         end
 
-        cliData, cliErr = wampServer:getPendingData(sessionId)
+        cliData = wampServer:getPendingData(sessionId)
     end
 
     if webSocket.fatal then
@@ -83,7 +85,7 @@ while true do
         return ngx.exit(444)
     end
 
-    local data, typ, err = webSocket:recv_frame()
+    data, typ = webSocket:recv_frame()
 
     if not data then
 
@@ -115,7 +117,7 @@ while true do
             return ngx.exit(444)
         end
 
-    elseif typ == "pong" then
+--    elseif typ == "pong" then
 
 --        ngx.log(ngx.DEBUG, "client ponged")
 
