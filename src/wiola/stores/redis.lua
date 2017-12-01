@@ -480,7 +480,9 @@ function _M:registerSessionRPC(realm, uri, options, regId)
         registrationIdStr = formatNumber(registrationId)
 
         redis:sadd("wiRealm" .. realm .. "RPCs", uri)
-        redis:hmset("wiRealm" .. realm .. "RPC" .. uri, "calleeSesId", regIdStr, "registrationId", registrationIdStr)
+        redis:hmset("wiRealm" .. realm .. "RPC" .. uri,
+            "calleeSesId", regIdStr,
+            "registrationId", registrationIdStr)
 
         if options.disclose_caller ~= nil and options.disclose_caller == true then
             redis:hmset("wiRPC" .. uri, "disclose_caller", true)
@@ -573,8 +575,13 @@ function _M:addCallInvocation(callReqId, callerSessId, invocReqId, calleeSessId)
     local invocReqIdStr = formatNumber(invocReqId)
     local calleeSessIdStr = formatNumber(calleeSessId)
 
-    redis:hmset("wiCall" .. callReqIdStr, "callerSesId", callerSessIdStr, "calleeSesId", calleeSessIdStr, "wiInvocId", invocReqIdStr)
-    redis:hmset("wiInvoc" .. invocReqIdStr, "CallReqId", callReqIdStr, "callerSesId", callerSessIdStr)
+    redis:hmset("wiCall" .. callReqIdStr,
+        "callerSesId", callerSessIdStr,
+        "calleeSesId", calleeSessIdStr,
+        "wiInvocId", invocReqIdStr)
+    redis:hmset("wiInvoc" .. invocReqIdStr,
+        "CallReqId", callReqIdStr,
+        "callerSesId", callerSessIdStr)
 end
 
 return _M

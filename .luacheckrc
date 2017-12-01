@@ -1,2 +1,4 @@
+color = true
+codes = true
+self = false
 globals = { "ngx" }
-ignore = { "212", "421", "431", "631" }

@@ -5,7 +5,7 @@
 --
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
-local webSocket, wampServer, ok, err
+local webSocket, wampServer, ok, err, bytes
 
 webSocket, err = wsServer:new({
     timeout = tonumber(ngx.var.wiola_socket_timeout, 10) or 100,
@@ -29,18 +29,18 @@ local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.hea
 ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection)
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
-local function removeConnection(premature, sessionId)
+local function removeConnection(_, sessId)
 
-    ngx.log(ngx.DEBUG, "Cleaning up session: ", sessionId)
+    ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local config = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    local ok, err = store:init(config.storeConfig)
+    ok, err = store:init(config.storeConfig)
     if not ok then
         ngx.log(ngx.DEBUG, "Can not init datastore!", err)
     else
-        store:removeSession(sessionId)
+        store:removeSession(sessId)
         ngx.log(ngx.DEBUG, "Session data successfully removed!")
     end
 end
@@ -65,7 +65,6 @@ while true do
 
     while cliData ~= ngx.null do
         ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
-        local bytes, err
         if dataType == 'binary' then
             bytes, err = webSocket:send_binary(cliData)
         else
@@ -89,7 +88,7 @@ while true do
 
     if not data then
 
-        local bytes, err = webSocket:send_ping()
+        bytes, err = webSocket:send_ping()
         if not bytes then
             ngx.log(ngx.ERR, "Failed to send ping: ", err)
             ngx.timer.at(0, removeConnection, sessionId)
@@ -99,7 +98,7 @@ while true do
     elseif typ == "close" then
 
         ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
-        local bytes, err = webSocket:send_close(1000, "Closing connection")
+        bytes, err = webSocket:send_close(1000, "Closing connection")
             if not bytes then
                 ngx.log(ngx.ERR, "Failed to send the close frame: ", err)
                 return
@@ -110,7 +109,7 @@ while true do
 
     elseif typ == "ping" then
 
-        local bytes, err = webSocket:send_pong()
+        bytes, err = webSocket:send_pong()
         if not bytes then
             ngx.log(ngx.ERR, "Failed to send pong: ", err)
             ngx.timer.at(0, removeConnection, sessionId)
