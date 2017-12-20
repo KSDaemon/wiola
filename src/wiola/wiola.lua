@@ -202,56 +202,52 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
     if not subId then
         return
     end
+
     local pubId = store:getRegId()
     local recipients = store:getTopicSessions(session.realm, eventUri)
-    local argsL, argsKW
+    local parameters = {n = select('#', ...), ...}
+    local argsL, argsKW = { session.sessId }, nil
 
     if eventUri == 'wamp.session.on_join' then
-        argsL = {{ session = session.sessId } }
-        local arg = {n = select('#', ...), ...}
-        if arg[1] then
-            argsL[1].authid = arg[1].authid
-            argsL[1].authrole = arg[1].authrole
-            argsL[1].authmethod = arg[1].authmethod
-            argsL[1].authprovider = arg[1].authprovider
-        end
-        argsKW = nil
-    elseif eventUri == 'wamp.session.on_leave' then
         argsL = {{ session = session.sessId }}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
-    elseif eventUri == '' then
-        argsL = {}
-        argsKW = nil
+        if parameters[1] then
+            argsL[1].authid = parameters[1].authid
+            argsL[1].authrole = parameters[1].authrole
+            argsL[1].authmethod = parameters[1].authmethod
+            argsL[1].authprovider = parameters[1].authprovider
+        end
+        -- TODO Add information about transport
+    elseif eventUri == 'wamp.session.on_leave' then
+        -- nothing to add :)
+    elseif eventUri == 'wamp.subscription.on_create' then
+        local details = {
+            id = parameters[1],
+            created = parameters[2],
+            uri = parameters[3],
+            match = parameters[4]
+        }
+        table.insert(argsL, details)
+    elseif eventUri == 'wamp.subscription.on_subscribe' then
+        table.insert(argsL, parameters[1])
+    elseif eventUri == 'wamp.subscription.on_unsubscribe' then
+        table.insert(argsL, parameters[1])
+    elseif eventUri == 'wamp.subscription.on_delete' then
+        table.insert(argsL, parameters[1])
+    elseif eventUri == 'wamp.registration.on_create' then
+        local details = {
+            id = parameters[1],
+            created = parameters[2],
+            uri = parameters[3],
+            match = parameters[4],
+            invoke = parameters[5]
+        }
+        table.insert(argsL, details)
+    elseif eventUri == 'wamp.registration.on_register' then
+        table.insert(argsL, parameters[1])
+    elseif eventUri == 'wamp.registration.on_unregister' then
+        table.insert(argsL, parameters[1])
+    elseif eventUri == 'wamp.registration.on_delete' then
+        table.insert(argsL, parameters[1])
     end
 
     self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
@@ -563,9 +559,11 @@ function _M:receiveData(regId, data)
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
                 if isNewSubscription then
-                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_create', session)
+                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_create', session,
+                        subscriptionId, os.date("!%Y-%m-%dT%TZ"), dataObj[4], "exact")
                 end
-                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_subscribe', session)
+                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_subscribe', session,
+                    subscriptionId)
             else
                 self:_putData(session, {
                     WAMP_MSG_SPEC.ERROR,
@@ -590,9 +588,9 @@ function _M:receiveData(regId, data)
             if isSesSubscrbd ~= ngx.null then
                 -- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNSUBSCRIBED, dataObj[2] })
-                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_unsubscribe', session)
+                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_unsubscribe', session, dataObj[3])
                 if wasTopicRemoved then
-                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_delete', session)
+                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_delete', session, dataObj[3])
                 end
             else
                 self:_putData(session, {
@@ -738,8 +736,10 @@ function _M:receiveData(regId, data)
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
                     -- TODO Refactor this in case of implementing shared registrations
-                    self:_publishMetaEvent('rpc', 'wamp.registration.on_create', session)
-                    self:_publishMetaEvent('rpc', 'wamp.registration.on_register', session)
+                    self:_publishMetaEvent('rpc', 'wamp.registration.on_create', session,
+                        registrationId, os.date("!%Y-%m-%dT%TZ"), dataObj[4], "exact", "single")
+                    self:_publishMetaEvent('rpc', 'wamp.registration.on_register', session,
+                        registrationId)
                 end
             else
                 self:_putData(session, {
@@ -767,9 +767,9 @@ function _M:receiveData(regId, data)
             if rpc ~= ngx.null then
                 -- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNREGISTERED, dataObj[2] })
-                self:_publishMetaEvent('rpc', 'wamp.registration.on_unregister', session)
+                self:_publishMetaEvent('rpc', 'wamp.registration.on_unregister', session, dataObj[3])
                 -- TODO Refactor this in case of implementing shared registrations
-                self:_publishMetaEvent('rpc', 'wamp.registration.on_delete', session)
+                self:_publishMetaEvent('rpc', 'wamp.registration.on_delete', session, dataObj[3])
             else
                 self:_putData(session, {
                     WAMP_MSG_SPEC.ERROR,
