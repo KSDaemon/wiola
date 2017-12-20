@@ -112,11 +112,25 @@ function _M:_randomString(length)
 end
 
 -- Validate uri for WAMP requirements
-function _M:_validateURI(uri)
-    local m, err = ngx.re.match(uri, "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$")
-    ngx.log(ngx.DEBUG, 'Validating URI: ', uri, '. Found match? ', m == nil, ', error: ', err)
-    if not m or string.find(uri, 'wamp') == 1 then
+function _M:_validateURI(uri, patternBased, allowWAMP)
+    local re = "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$"
+    local rePattern = "^([0-9a-zA-Z_]{2,}\\.{1,2})*([0-9a-zA-Z_]{2,})$"
+
+    if patternBased == true then
+        re = rePattern
+    end
+
+    local m, err = ngx.re.match(uri, re)
+    ngx.log(ngx.DEBUG, 'Validating URI: ', uri, '. Found match? ', m ~= nil, ', error: ', err)
+
+    if not m then
         return false
+    elseif string.find(uri, 'wamp.') == 1 then
+        if allowWAMP ~= true then
+            return false
+        else
+            return true, true
+        end
     else
         return true
     end
@@ -279,7 +293,7 @@ function _M:receiveData(regId, data)
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
             local realm = dataObj[2]
-            if self:_validateURI(realm) then
+            if self:_validateURI(realm, false, false) then
 
                 if config.wampCRA.authType ~= "none" then
 
@@ -515,7 +529,7 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list]
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4]) then
+            if self:_validateURI(dataObj[4], false, false) then
                 local pubId = store:getRegId()
                 local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, dataObj[3])
                 local details = {}
@@ -553,16 +567,16 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4]) then
+            if self:_validateURI(dataObj[4], false, true) then
                 local subscriptionId, isNewSubscription = store:subscribeSession(session.realm, dataObj[4], regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
                 if isNewSubscription then
-                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_create', session,
+                    self:_publishMetaEvent('subscription', 'wamp.subscription.on_create', session,
                         subscriptionId, os.date("!%Y-%m-%dT%TZ"), dataObj[4], "exact")
                 end
-                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_subscribe', session,
+                self:_publishMetaEvent('subscription', 'wamp.subscription.on_subscribe', session,
                     subscriptionId)
             else
                 self:_putData(session, {
@@ -588,9 +602,9 @@ function _M:receiveData(regId, data)
             if isSesSubscrbd ~= ngx.null then
                 -- WAMP SPEC: [UNSUBSCRIBED, UNSUBSCRIBE.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNSUBSCRIBED, dataObj[2] })
-                self:_publishMetaEvent('pubsub', 'wamp.subscription.on_unsubscribe', session, dataObj[3])
+                self:_publishMetaEvent('subscription', 'wamp.subscription.on_unsubscribe', session, dataObj[3])
                 if wasTopicRemoved then
-                    self:_publishMetaEvent('pubsub', 'wamp.subscription.on_delete', session, dataObj[3])
+                    self:_publishMetaEvent('subscription', 'wamp.subscription.on_delete', session, dataObj[3])
                 end
             else
                 self:_putData(session, {
@@ -614,90 +628,135 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list]
         -- WAMP SPEC: [CALL, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4]) then
+            local isUriValid, isWampSpecial = self:_validateURI(dataObj[4], false, true)
+            if isUriValid then
 
-                local rpcInfo = store:getRPC(session.realm, dataObj[4])
+                if isWampSpecial then
+                    -- Received a call for WAMP meta RPCs
 
-                if not rpcInfo then
-                    -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
-                    self:_putData(session, {
-                        WAMP_MSG_SPEC.ERROR,
-                        WAMP_MSG_SPEC.CALL,
-                        dataObj[2],
-                        setmetatable({}, { __jsontype = 'object' }),
-                        "wamp.error.no_suitable_callee"
-                    })
-                else
-                    local details = setmetatable({}, { __jsontype = 'object' })
+                    local rpcUri = dataObj[4]
+                    local metapart = string.match(dataObj[4], "wamp.(%a+)")
 
-                    if config.callerIdentification == "always" or
-                            (config.callerIdentification == "auto" and
-                                    ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
-                                            (rpcInfo.disclose_caller == true))) then
-                        details.caller = regId
-                    end
+                    if config.metaAPI[metapart] then
+                        if rpcUri == 'wamp.session.count' then
 
-                    if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
-                        details.receive_progress = true
-                    end
-
-                    local calleeSess = store:getSession(rpcInfo.calleeSesId)
-                    local invReqId = store:getRegId()
-
-                    if dataObj[3].timeout ~= nil and
-                            dataObj[3].timeout > 0 and
-                            calleeSess.wampFeatures.callee.features.call_timeout == true and
-                            calleeSess.wampFeatures.callee.features.call_canceling == true then
-
-                        -- Caller specified Timeout for CALL processing and callee support this feature
-                        local function callCancel(_, calleeSession, invocReqId)
-
-                            -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
-                            self:_putData(calleeSession, {
-                                WAMP_MSG_SPEC.INTERRUPT,
-                                invocReqId,
-                                setmetatable({}, { __jsontype = 'object' })
+                        elseif rpcUri == 'wamp.session.list' then
+                        elseif rpcUri == 'wamp.session.get' then
+                        elseif rpcUri == 'wamp.subscription.list' then
+                        elseif rpcUri == 'wamp.subscription.lookup' then
+                        elseif rpcUri == 'wamp.subscription.match' then
+                        elseif rpcUri == 'wamp.subscription.get' then
+                        elseif rpcUri == 'wamp.subscription.list_subscribers' then
+                        elseif rpcUri == 'wamp.subscription.count_subscribers' then
+                        elseif rpcUri == 'wamp.registration.list' then
+                        elseif rpcUri == 'wamp.registration.lookup' then
+                        elseif rpcUri == 'wamp.registration.match' then
+                        elseif rpcUri == 'wamp.registration.get' then
+                        elseif rpcUri == 'wamp.registration.list_callees' then
+                        elseif rpcUri == 'wamp.registration.count_callees' then
+                        else
+                            self:_putData(session, {
+                                WAMP_MSG_SPEC.ERROR,
+                                WAMP_MSG_SPEC.CALL,
+                                dataObj[2],
+                                setmetatable({}, { __jsontype = 'object' }),
+                                "wamp.error.invalid_uri"
                             })
                         end
-
-                        local ok, err = ngx.timer.at(dataObj[3].timeout, callCancel, calleeSess, invReqId)
-
-                        if not ok then
-                            ngx.log(ngx.ERR, "failed to create timer: ", err)
-                        end
-                    end
-
-                    store:addCallInvocation(dataObj[2], session.sessId, invReqId, calleeSess.sessId)
-
-                    if #dataObj == 5 then
-                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
-                        --             CALL.Arguments|list]
-                        self:_putData(calleeSess, {
-                            WAMP_MSG_SPEC.INVOCATION,
-                            invReqId,
-                            rpcInfo.registrationId,
-                            details,
-                            dataObj[5]
+                    else
+                        self:_putData(session, {
+                            WAMP_MSG_SPEC.ERROR,
+                            WAMP_MSG_SPEC.CALL,
+                            dataObj[2],
+                            setmetatable({}, { __jsontype = 'object' }),
+                            "wamp.error.invalid_uri"
                         })
-                    elseif #dataObj == 6 then
-                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
-                        --             CALL.Arguments|list, CALL.ArgumentsKw|dict]
-                        self:_putData(calleeSess, {
-                            WAMP_MSG_SPEC.INVOCATION,
-                            invReqId,
-                            rpcInfo.registrationId,
-                            details,
-                            dataObj[5],
-                            dataObj[6]
+                    end
+                else
+
+                    local rpcInfo = store:getRPC(session.realm, dataObj[4])
+
+                    if not rpcInfo then
+                        -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
+                        self:_putData(session, {
+                            WAMP_MSG_SPEC.ERROR,
+                            WAMP_MSG_SPEC.CALL,
+                            dataObj[2],
+                            setmetatable({}, { __jsontype = 'object' }),
+                            "wamp.error.no_suitable_callee"
                         })
                     else
-                        -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
-                        self:_putData(calleeSess, {
-                            WAMP_MSG_SPEC.INVOCATION,
-                            invReqId,
-                            rpcInfo.registrationId,
-                            details
-                        })
+                        local details = setmetatable({}, { __jsontype = 'object' })
+
+                        if config.callerIdentification == "always" or
+                        (config.callerIdentification == "auto" and
+                        ((dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true) or
+                        (rpcInfo.disclose_caller == true))) then
+                            details.caller = regId
+                        end
+
+                        if dataObj[3].receive_progress ~= nil and dataObj[3].receive_progress == true then
+                            details.receive_progress = true
+                        end
+
+                        local calleeSess = store:getSession(rpcInfo.calleeSesId)
+                        local invReqId = store:getRegId()
+
+                        if dataObj[3].timeout ~= nil and
+                        dataObj[3].timeout > 0 and
+                        calleeSess.wampFeatures.callee.features.call_timeout == true and
+                        calleeSess.wampFeatures.callee.features.call_canceling == true then
+
+                            -- Caller specified Timeout for CALL processing and callee support this feature
+                            local function callCancel(_, calleeSession, invocReqId)
+
+                                -- WAMP SPEC: [INTERRUPT, INVOCATION.Request|id, Options|dict]
+                                self:_putData(calleeSession, {
+                                    WAMP_MSG_SPEC.INTERRUPT,
+                                    invocReqId,
+                                    setmetatable({}, { __jsontype = 'object' })
+                                })
+                            end
+
+                            local ok, err = ngx.timer.at(dataObj[3].timeout, callCancel, calleeSess, invReqId)
+
+                            if not ok then
+                                ngx.log(ngx.ERR, "failed to create timer: ", err)
+                            end
+                        end
+
+                        store:addCallInvocation(dataObj[2], session.sessId, invReqId, calleeSess.sessId)
+
+                        if #dataObj == 5 then
+                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
+                            --             CALL.Arguments|list]
+                            self:_putData(calleeSess, {
+                                WAMP_MSG_SPEC.INVOCATION,
+                                invReqId,
+                                rpcInfo.registrationId,
+                                details,
+                                dataObj[5]
+                            })
+                        elseif #dataObj == 6 then
+                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
+                            --             CALL.Arguments|list, CALL.ArgumentsKw|dict]
+                            self:_putData(calleeSess, {
+                                WAMP_MSG_SPEC.INVOCATION,
+                                invReqId,
+                                rpcInfo.registrationId,
+                                details,
+                                dataObj[5],
+                                dataObj[6]
+                            })
+                        else
+                            -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]
+                            self:_putData(calleeSess, {
+                                WAMP_MSG_SPEC.INVOCATION,
+                                invReqId,
+                                rpcInfo.registrationId,
+                                details
+                            })
+                        end
                     end
                 end
             else
@@ -720,7 +779,7 @@ function _M:receiveData(regId, data)
     elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then
         -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4]) then
+            if self:_validateURI(dataObj[4], false, false) then
 
                 local registrationId = store:registerSessionRPC(session.realm, dataObj[4], dataObj[3], regId)
 
@@ -736,9 +795,9 @@ function _M:receiveData(regId, data)
                     -- WAMP SPEC: [REGISTERED, REGISTER.Request|id, Registration|id]
                     self:_putData(session, { WAMP_MSG_SPEC.REGISTERED, dataObj[2], registrationId })
                     -- TODO Refactor this in case of implementing shared registrations
-                    self:_publishMetaEvent('rpc', 'wamp.registration.on_create', session,
+                    self:_publishMetaEvent('registration', 'wamp.registration.on_create', session,
                         registrationId, os.date("!%Y-%m-%dT%TZ"), dataObj[4], "exact", "single")
-                    self:_publishMetaEvent('rpc', 'wamp.registration.on_register', session,
+                    self:_publishMetaEvent('registration', 'wamp.registration.on_register', session,
                         registrationId)
                 end
             else
@@ -767,9 +826,9 @@ function _M:receiveData(regId, data)
             if rpc ~= ngx.null then
                 -- WAMP SPEC: [UNREGISTERED, UNREGISTER.Request|id]
                 self:_putData(session, { WAMP_MSG_SPEC.UNREGISTERED, dataObj[2] })
-                self:_publishMetaEvent('rpc', 'wamp.registration.on_unregister', session, dataObj[3])
+                self:_publishMetaEvent('registration', 'wamp.registration.on_unregister', session, dataObj[3])
                 -- TODO Refactor this in case of implementing shared registrations
-                self:_publishMetaEvent('rpc', 'wamp.registration.on_delete', session, dataObj[3])
+                self:_publishMetaEvent('registration', 'wamp.registration.on_delete', session, dataObj[3])
             else
                 self:_putData(session, {
                     WAMP_MSG_SPEC.ERROR,

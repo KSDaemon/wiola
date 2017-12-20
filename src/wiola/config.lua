@@ -54,8 +54,8 @@ local wiolaConf = {
     },
     metaAPI = {
         session = false,
-        pubsub = false,
-        rpc = false
+        subscription = false,
+        registration = false
     }
 }
 
