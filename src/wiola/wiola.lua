@@ -267,6 +267,49 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
     self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
 end
 
+-- Process Call META RPC
+function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
+
+    if config.metaAPI[part] == true then
+
+        if rpcUri == 'wamp.session.count' then
+
+        elseif rpcUri == 'wamp.session.list' then
+        elseif rpcUri == 'wamp.session.get' then
+        elseif rpcUri == 'wamp.subscription.list' then
+        elseif rpcUri == 'wamp.subscription.lookup' then
+        elseif rpcUri == 'wamp.subscription.match' then
+        elseif rpcUri == 'wamp.subscription.get' then
+        elseif rpcUri == 'wamp.subscription.list_subscribers' then
+        elseif rpcUri == 'wamp.subscription.count_subscribers' then
+        elseif rpcUri == 'wamp.registration.list' then
+        elseif rpcUri == 'wamp.registration.lookup' then
+        elseif rpcUri == 'wamp.registration.match' then
+        elseif rpcUri == 'wamp.registration.get' then
+        elseif rpcUri == 'wamp.registration.list_callees' then
+        elseif rpcUri == 'wamp.registration.count_callees' then
+        else
+            self:_putData(session, {
+                WAMP_MSG_SPEC.ERROR,
+                WAMP_MSG_SPEC.CALL,
+                requestId,
+                setmetatable({}, { __jsontype = 'object' }),
+                "wamp.error.invalid_uri"
+            })
+        end
+    else
+        self:_putData(session, {
+            WAMP_MSG_SPEC.ERROR,
+            WAMP_MSG_SPEC.CALL,
+            requestId,
+            setmetatable({}, { __jsontype = 'object' }),
+            "wamp.error.invalid_uri"
+        })
+    end
+
+
+end
+
 --
 -- Receive data from client
 --
@@ -633,45 +676,8 @@ function _M:receiveData(regId, data)
 
                 if isWampSpecial then
                     -- Received a call for WAMP meta RPCs
-
-                    local rpcUri = dataObj[4]
                     local metapart = string.match(dataObj[4], "wamp.(%a+)")
-
-                    if config.metaAPI[metapart] then
-                        if rpcUri == 'wamp.session.count' then
-
-                        elseif rpcUri == 'wamp.session.list' then
-                        elseif rpcUri == 'wamp.session.get' then
-                        elseif rpcUri == 'wamp.subscription.list' then
-                        elseif rpcUri == 'wamp.subscription.lookup' then
-                        elseif rpcUri == 'wamp.subscription.match' then
-                        elseif rpcUri == 'wamp.subscription.get' then
-                        elseif rpcUri == 'wamp.subscription.list_subscribers' then
-                        elseif rpcUri == 'wamp.subscription.count_subscribers' then
-                        elseif rpcUri == 'wamp.registration.list' then
-                        elseif rpcUri == 'wamp.registration.lookup' then
-                        elseif rpcUri == 'wamp.registration.match' then
-                        elseif rpcUri == 'wamp.registration.get' then
-                        elseif rpcUri == 'wamp.registration.list_callees' then
-                        elseif rpcUri == 'wamp.registration.count_callees' then
-                        else
-                            self:_putData(session, {
-                                WAMP_MSG_SPEC.ERROR,
-                                WAMP_MSG_SPEC.CALL,
-                                dataObj[2],
-                                setmetatable({}, { __jsontype = 'object' }),
-                                "wamp.error.invalid_uri"
-                            })
-                        end
-                    else
-                        self:_putData(session, {
-                            WAMP_MSG_SPEC.ERROR,
-                            WAMP_MSG_SPEC.CALL,
-                            dataObj[2],
-                            setmetatable({}, { __jsontype = 'object' }),
-                            "wamp.error.invalid_uri"
-                        })
-                    end
+                    self:_callMetaRPC(metapart, dataObj[4], session, dataObj[2], dataObj[5], dataObj[6])
                 else
 
                     local rpcInfo = store:getRPC(session.realm, dataObj[4])
