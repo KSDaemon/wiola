@@ -129,12 +129,12 @@ function _M.config(config)
             wiolaConf.metaAPI.session = config.metaAPI.session
         end
 
-        if config.metaAPI.pubsub ~= nil then
-            wiolaConf.metaAPI.pubsub = config.metaAPI.pubsub
+        if config.metaAPI.subscription ~= nil then
+            wiolaConf.metaAPI.subscription = config.metaAPI.subscription
         end
 
-        if config.metaAPI.rpc ~= nil then
-            wiolaConf.metaAPI.rpc = config.metaAPI.rpc
+        if config.metaAPI.registration ~= nil then
+            wiolaConf.metaAPI.registration = config.metaAPI.registration
         end
     end
 end
