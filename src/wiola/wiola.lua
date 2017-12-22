@@ -91,7 +91,7 @@ end
 --
 function _M.new()
     local self = setmetatable({}, _M)
-    local ok, err = store:init(config.storeConfig)
+    local ok, err = store:init(config)
     if not ok then
         return ok, err
     end

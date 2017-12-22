@@ -27,14 +27,14 @@ function _M:init(cfg)
     redis = redisLib:new()
     config = cfg
 
-    if config.port == nil then
-        redisOk, redisErr = redis:connect(config.host)
+    if config.storeConfig.port == nil then
+        redisOk, redisErr = redis:connect(config.storeConfig.host)
     else
-        redisOk, redisErr = redis:connect(config.host, config.port)
+        redisOk, redisErr = redis:connect(config.storeConfig.host, config.storeConfig.port)
     end
 
-    if redisOk and config.db ~= nil then
-        redis:select(config.db)
+    if redisOk and config.storeConfig.db ~= nil then
+        redis:select(config.storeConfig.db)
     end
 
     return redisOk, redisErr
@@ -201,9 +201,9 @@ function _M:addSessionToRealm(regId, realm)
     if redis:sismember("wiolaRealms", realm) == 0 then
         ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
         redis:sadd("wiolaRealms", realm)
+        self:registerMetaRpc(realm)
     end
     redis:sadd("wiRealm" .. realm .. "Sessions", formatNumber(regId))
-
 end
 
 ---
@@ -491,6 +491,56 @@ function _M:registerSessionRPC(realm, uri, options, regId)
     end
 
     return registrationId
+end
+
+---
+--- Register Meta API RPCs, which are defined in config
+---
+---@param realm string realm
+---
+function _M:registerMetaRpc(realm)
+    ngx.log(ngx.DEBUG, "Registering Meta RPCs in realm: ", realm)
+
+    local uris = {}
+
+    if config.metaAPI.session == true then
+        table.insert(uris, 'wamp.session.count')
+        table.insert(uris, 'wamp.session.list')
+        table.insert(uris, 'wamp.session.get')
+    end
+
+    if config.metaAPI.subscription == true then
+        table.insert(uris, 'wamp.subscription.list')
+        table.insert(uris, 'wamp.subscription.lookup')
+        table.insert(uris, 'wamp.subscription.match')
+        table.insert(uris, 'wamp.subscription.get')
+        table.insert(uris, 'wamp.subscription.list_subscribers')
+        table.insert(uris, 'wamp.subscription.count_subscribers')
+    end
+
+    if config.metaAPI.registration == true then
+        table.insert(uris, 'wamp.registration.list')
+        table.insert(uris, 'wamp.registration.lookup')
+        table.insert(uris, 'wamp.registration.match')
+        table.insert(uris, 'wamp.registration.get')
+        table.insert(uris, 'wamp.registration.list_callees')
+        table.insert(uris, 'wamp.registration.count_callees')
+    end
+
+    local registrationId, registrationIdStr
+    for _, uri in ipairs(uris) do
+
+        if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
+            registrationId = self:getRegId()
+            registrationIdStr = formatNumber(registrationId)
+
+            redis:sadd("wiRealm" .. realm .. "RPCs", uri)
+            redis:hmset("wiRealm" .. realm .. "RPC" .. uri,
+                "calleeSesId", "0",
+                "registrationId", registrationIdStr)
+        end
+
+    end
 end
 
 ---
