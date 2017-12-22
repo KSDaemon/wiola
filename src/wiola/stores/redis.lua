@@ -9,17 +9,17 @@ local _M = {}
 local redis
 local config
 
--- Format NUMBER for using in strings
+--- Format NUMBER for using in strings
 local formatNumber = function(n)
     return string.format("%.0f", n)
 end
 
 
---
--- Initialize store connection
---
--- config - store configuration
---
+---
+--- Initialize store connection
+---
+---@param cfg table store configuration
+---
 function _M:init(cfg)
     local redisOk, redisErr
 
@@ -40,9 +40,9 @@ function _M:init(cfg)
     return redisOk, redisErr
 end
 
---
--- Generate unique Id
---
+---
+--- Generate unique Id
+---
 function _M:getRegId()
     local regId
     local max = 2 ^ 53
@@ -59,25 +59,23 @@ function _M:getRegId()
     return regId
 end
 
---
--- Add new session Id to active list
---
--- regId - session registration Id
--- session - Session information
---
+---
+--- Add new session Id to active list
+---
+---@param regId number session registration Id
+---@param session table Session information
+---
 function _M:addSession(regId, session)
-
     session.sessId = formatNumber(session.sessId)
     redis:sadd("wiolaIds", formatNumber(regId))
     redis:hmset("wiSes" .. formatNumber(regId), session)
-
 end
 
---
--- Get session info
---
--- regId - session registration Id
---
+---
+--- Get session info
+---
+---@param regId number session registration Id
+---
 function _M:getSession(regId)
     local session = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId)))
     session.isWampEstablished = tonumber(session.isWampEstablished)
@@ -85,24 +83,23 @@ function _M:getSession(regId)
     return session
 end
 
---
--- Change session info
---
--- regId - session registration Id
--- session - Session information
---
+---
+--- Change session info
+---
+---@param regId number session registration Id
+---@param session table Session information
+---
 function _M:changeSession(regId, session)
     session.isWampEstablished = formatNumber(session.isWampEstablished)
     session.sessId = formatNumber(session.sessId)
     redis:hmset("wiSes" .. formatNumber(regId), session)
-
 end
 
---
--- Remove session data from runtime store
---
--- regId - session registration Id
---
+---
+--- Remove session data from runtime store
+---
+---@param regId number session registration Id
+---
 function _M:removeSession(regId)
     local regIdStr = formatNumber(regId)
 
@@ -141,41 +138,42 @@ function _M:removeSession(regId)
     redis:srem("wiolaIds",regIdStr)
 end
 
--- Prepare data for sending to client
---
--- session - Session information
--- data - data for client
---
+---
+--- Prepare data for sending to client
+---
+---@param session table Session information
+---@param data table data for client
+---
 function _M:putData(session, data)
     redis:rpush("wiSes" .. formatNumber(session.sessId) .. "Data", data)
 end
 
---
--- Retrieve data, available for session
---
--- regId - session registration Id
---
+---
+--- Retrieve data, available for session
+---
+---@param regId number session registration Id
+---
 function _M:getPendingData(regId)
     return redis:lpop("wiSes" .. formatNumber(regId) .. "Data")
 end
 
---
--- Get Challenge info
---
--- regId - session registration Id
---
+---
+--- Get Challenge info
+---
+---@param regId number session registration Id
+---
 function _M:getChallenge(regId)
     local challenge = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId) .. "Challenge"))
     challenge.session = tonumber(challenge.session)
     return challenge
 end
 
---
--- Change Challenge info
---
--- regId - session registration Id
--- challenge - Challenge information
---
+---
+--- Change Challenge info
+---
+---@param regId number session registration Id
+---@param challenge table Challenge information
+---
 function _M:changeChallenge(regId, challenge)
     if challenge.session then
         challenge.session = formatNumber(challenge.session)
@@ -183,21 +181,21 @@ function _M:changeChallenge(regId, challenge)
     redis:hmset("wiSes" .. formatNumber(regId) .. "Challenge", challenge)
 end
 
---
--- Remove Challenge data from runtime store
---
--- regId - session registration Id
---
+---
+--- Remove Challenge data from runtime store
+---
+---@param regId number session registration Id
+---
 function _M:removeChallenge(regId)
     redis:del("wiSes" .. formatNumber(regId) .. "Challenge")
 end
 
---
--- Add session to realm (creating one if needed)
---
--- regId - session registration Id
--- realm - session realm
---
+---
+--- Add session to realm (creating one if needed)
+---
+---@param regId number session registration Id
+---@param realm string session realm
+---
 function _M:addSessionToRealm(regId, realm)
 
     if redis:sismember("wiolaRealms", realm) == 0 then
@@ -208,23 +206,23 @@ function _M:addSessionToRealm(regId, realm)
 
 end
 
---
--- Get subscription id
---
--- realm - realm
--- uri - subscription uri
---
+---
+--- Get subscription id
+---
+---@param realm string session realm
+---@param uri string subscription uri
+---
 function _M:getSubscriptionId(realm, uri)
     return tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
 end
 
---
--- Subscribe session to topic (also create topic if it doesn't exist)
---
--- realm - realm
--- uri - subscription uri
--- regId - session registration Id
---
+---
+--- Subscribe session to topic (also create topic if it doesn't exist)
+---
+---@param realm string session realm
+---@param uri string subscription uri
+---@param regId number session registration Id
+---
 function _M:subscribeSession(realm, uri, regId)
     local subscriptionId = tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
     local isNewSubscription = false
@@ -242,15 +240,15 @@ function _M:subscribeSession(realm, uri, regId)
     return subscriptionId, isNewSubscription
 end
 
---
--- Unsubscribe session from topic (also remove topic if there is no more subscribers)
---
--- realm - realm
--- subscId - subscription Id
--- regId - session registration Id
---
--- Returns flag was session subscribed to requested topic
---
+---
+--- Unsubscribe session from topic (also remove topic if there is no more subscribers)
+---
+---@param realm string session realm
+---@param subscId number subscription Id
+---@param regId number session registration Id
+---
+---@return boolean, boolean was session unsubscribed from topic, was topic removed
+---
 function _M:unsubscribeSession(realm, subscId, regId)
     local subscIdStr = formatNumber(subscId)
     local regIdStr = formatNumber(regId)
@@ -269,24 +267,24 @@ function _M:unsubscribeSession(realm, subscId, regId)
     return isSesSubscrbd, wasTopicRemoved
 end
 
---
--- Get sessions subscribed to topic
---
--- realm - realm
--- uri - subscription uri
---
+---
+--- Get sessions subscribed to topic
+---
+---@param realm string realm
+---@param uri string subscription uri
+---
 function _M:getTopicSessions(realm, uri)
     return redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
 end
 
---
--- Get sessions to deliver event
---
--- realm - realm
--- uri - subscription uri
--- regId - session registration Id
--- options - advanced profile options
---
+---
+--- Get sessions to deliver event
+---
+---@param realm string realm
+---@param uri string subscription uri
+---@param regId number session registration Id
+---@param options table advanced profile options
+---
 function _M:getEventRecipients(realm, uri, regId, options)
 
     local regIdStr = formatNumber(regId)
@@ -396,22 +394,22 @@ function _M:getEventRecipients(realm, uri, regId, options)
     return recipients
 end
 
---
--- Get subscription info
---
--- regId - subscription registration Id
---
+---
+--- Get subscription info
+---
+---@param regId number subscription registration Id
+---
 function _M:getSubscription(regId)
     local subscription = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId)))
     subscription.isWampEstablished = tonumber(subscription.isWampEstablished)
     return subscription
 end
 
---
--- Remove subscription data from runtime store
---
--- regId - subscription registration Id
---
+---
+--- Remove subscription data from runtime store
+---
+---@param regId number subscription registration Id
+---
 function _M:removeSubscription(regId)
     local regIdStr = formatNumber(regId)
 
@@ -450,12 +448,12 @@ function _M:removeSubscription(regId)
     redis:srem("wiolaIds",regIdStr)
 end
 
---
--- Get registered RPC info (if exists)
---
--- realm - realm
--- uri - RPC registration uri
---
+---
+--- Get registered RPC info (if exists)
+---
+---@param realm string realm
+---@param uri string RPC registration uri
+---
 function _M:getRPC(realm, uri)
     local rpc = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "RPC" .. uri))
     rpc.calleeSesId = tonumber(rpc.calleeSesId)
@@ -463,14 +461,14 @@ function _M:getRPC(realm, uri)
     return rpc
 end
 
---
--- Register session RPC
---
--- realm - realm
--- uri - RPC registration uri
--- options - registration options
--- regId - session registration Id
---
+---
+--- Register session RPC
+---
+---@param realm string realm
+---@param uri string RPC registration uri
+---@param options table registration options
+---@param regId number session registration Id
+---
 function _M:registerSessionRPC(realm, uri, options, regId)
     local registrationId, registrationIdStr
     local regIdStr = formatNumber(regId)
@@ -495,15 +493,13 @@ function _M:registerSessionRPC(realm, uri, options, regId)
     return registrationId
 end
 
---
--- Unregister session RPC
---
--- realm - realm
--- registrationId - RPC registration Id
--- regId - session registration Id
---
--- Returns flag was session registerd to requested topic
---
+---
+--- Unregister session RPC
+---
+---@param realm string realm
+---@param registrationId number RPC registration Id
+---@param regId number session registration Id
+---
 function _M:unregisterSessionRPC(realm, registrationId, regId)
     local regIdStr = formatNumber(regId)
     local registrationIdStr = formatNumber(registrationId)
@@ -519,11 +515,11 @@ function _M:unregisterSessionRPC(realm, registrationId, regId)
     return rpc
 end
 
---
--- Get invocation info
---
--- invocReqId - invocation request Id
---
+---
+--- Get invocation info
+---
+---@param invocReqId number invocation request Id
+---
 function _M:getInvocation(invocReqId)
     local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. formatNumber(invocReqId)))
     invoc.CallReqId = tonumber(invoc.CallReqId)
@@ -531,20 +527,20 @@ function _M:getInvocation(invocReqId)
     return invoc
 end
 
---
--- Remove invocation
---
--- invocReqId - invocation request Id
---
+---
+--- Remove invocation
+---
+---@param invocReqId number invocation request Id
+---
 function _M:removeInvocation(invocReqId)
     redis:del("wiInvoc" .. formatNumber(invocReqId))
 end
 
---
--- Get call info
---
--- callReqId - call request Id
---
+---
+--- Get call info
+---
+---@param callReqId number call request Id
+---
 function _M:getCall(callReqId)
     local call = redis:array_to_hash(redis:hgetall("wiCall" .. formatNumber(callReqId)))
     call.calleeSesId = tonumber(call.calleeSesId)
@@ -552,23 +548,23 @@ function _M:getCall(callReqId)
     return call
 end
 
---
--- Remove call
---
--- callReqId - call request Id
---
+---
+--- Remove call
+---
+---@param callReqId number call request Id
+---
 function _M:removeCall(callReqId)
     redis:del("wiCall" .. formatNumber(callReqId))
 end
 
---
--- Add RPC Call & invocation
---
--- callReqId - call request Id
--- callerSessId - caller session registration Id
--- invocReqId - invocation request Id
--- calleeSessId - callee session registration Id
---
+---
+--- Add RPC Call & invocation
+---
+---@param callReqId number call request Id
+---@param callerSessId number caller session registration Id
+---@param invocReqId number invocation request Id
+---@param calleeSessId number callee session registration Id
+---
 function _M:addCallInvocation(callReqId, callerSessId, invocReqId, calleeSessId)
     local callReqIdStr = formatNumber(callReqId)
     local callerSessIdStr = formatNumber(callerSessId)
