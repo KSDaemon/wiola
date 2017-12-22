@@ -273,7 +273,6 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
     if config.metaAPI[part] == true then
 
         if rpcUri == 'wamp.session.count' then
-
         elseif rpcUri == 'wamp.session.list' then
         elseif rpcUri == 'wamp.session.get' then
         elseif rpcUri == 'wamp.subscription.list' then
@@ -303,7 +302,7 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             WAMP_MSG_SPEC.CALL,
             requestId,
             setmetatable({}, { __jsontype = 'object' }),
-            "wamp.error.invalid_uri"
+            "wamp.error.no_suitable_callee"
         })
     end
 
