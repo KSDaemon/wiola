@@ -1,16 +1,14 @@
---
--- Project: wiola
--- User: Konstantin Burkalev
--- Date: 06.04.17
---
+---
+--- Project: wiola
+--- User: Konstantin Burkalev
+--- Date: 06.04.17
+---
 
 local _M = {}
 
---
--- Cleans up all wiola sessions data in redis store
---
--- redis - Redis instance on which to operate
---
+---
+--- Cleans up all wiola sessions data in redis store
+---
 function _M.flushAll()
     ngx.log(ngx.DEBUG, "Cleaning up all wiola sessions...")
 
