@@ -14,6 +14,26 @@ local formatNumber = function(n)
     return string.format("%.0f", n)
 end
 
+---
+--- Return index of obj in array t
+---
+---@param t table array table
+---@param obj any object to search
+---@return index of obj or -1 if not found
+---------------------------------------------------
+local arrayIndexOf = function(t, obj)
+    if type(t) == 'table' then
+        for i = 1, #t do
+            if t[i] == obj then
+                return i
+            end
+        end
+
+        return -1
+    else
+        error("table.indexOf expects table for first argument, " .. type(t) .. " given")
+    end
+end
 
 ---
 --- Initialize store connection
@@ -77,10 +97,15 @@ end
 ---@param regId number session registration Id
 ---
 function _M:getSession(regId)
-    local session = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId)))
-    session.isWampEstablished = tonumber(session.isWampEstablished)
-    session.sessId = tonumber(session.sessId)
-    return session
+    local sessArr = redis:hgetall("wiSes" .. formatNumber(regId))
+    if #sessArr > 0 then
+        local session = redis:array_to_hash(sessArr)
+        session.isWampEstablished = tonumber(session.isWampEstablished)
+        session.sessId = tonumber(session.sessId)
+        return session
+    else
+        return nil
+    end
 end
 
 ---
@@ -136,6 +161,35 @@ function _M:removeSession(regId)
     redis:del("wiSes" .. regIdStr .. "Data")
     redis:del("wiSes" .. regIdStr)
     redis:srem("wiolaIds",regIdStr)
+end
+
+---
+--- Get session count in realm
+---
+---@param realm string realm to count sessions
+---@param authroles table optional authroles list
+---
+function _M:getSessionCount(realm, authroles)
+    local count = 0
+    local sessionsIdList = {}
+    local allSessions = redis:smembers("wiRealm" .. realm .. "Sessions")
+
+    if type(authroles) == 'table' and #authroles > 0 then
+
+        for _, sessId in ipairs(allSessions) do
+            local sessionInfo = self:getSession(sessId)
+
+            if sessionInfo.authInfo and arrayIndexOf(authroles, sessionInfo.authInfo.authrole) > 0 then
+                count = count + 1
+                table.insert(sessionsIdList, sessId)
+            end
+        end
+    else
+        count = redis:scard("wiRealm" .. realm .. "Sessions")
+        sessionsIdList = allSessions
+    end
+
+    return count, sessionsIdList
 end
 
 ---
@@ -395,14 +449,15 @@ function _M:getEventRecipients(realm, uri, regId, options)
 end
 
 ---
---- Get subscription info
+--- Get subscriptions ids list
 ---
----@param regId number subscription registration Id
+---@param realm string realm
 ---
-function _M:getSubscription(regId)
-    local subscription = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId)))
-    subscription.isWampEstablished = tonumber(subscription.isWampEstablished)
-    return subscription
+function _M:getSubscriptions(realm)
+    local subsIds = { exact = {}, prefix = {}, wildcard = {} }
+    -- TODO Make count of prefix/wildcard subscriptions
+    subsIds.exact = redis:hkeys("wiRealm" .. realm .. "RevSubs")
+    return subsIds
 end
 
 ---
