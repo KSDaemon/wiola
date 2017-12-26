@@ -46,6 +46,18 @@ local serializers = {
 }
 local store = require('wiola.stores.' .. config.store)
 
+-- Add Meta API features announcements if they are configured
+if config.metaAPI.session == true then
+    wamp_features.roles.broker.features.session_meta_api = true
+    wamp_features.roles.dealer.features.session_meta_api = true
+end
+if config.metaAPI.subscription == true then
+    wamp_features.roles.broker.features.subscription_meta_api = true
+end
+if config.metaAPI.registration == true then
+    wamp_features.roles.dealer.features.registration_meta_api = true
+end
+
 local WAMP_MSG_SPEC = {
     HELLO = 1,
     WELCOME = 2,
@@ -269,12 +281,38 @@ end
 
 -- Process Call META RPC
 function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
+    local data
+    local details = setmetatable({}, { __jsontype = 'object' })
 
     if config.metaAPI[part] == true then
 
         if rpcUri == 'wamp.session.count' then
+
+            local count = store:getSessionCount(session.realm, rpcArgsL)
+            data = { WAMP_MSG_SPEC.RESULT, requestId, details, { count } }
+
         elseif rpcUri == 'wamp.session.list' then
+
+            local count, sessList = store:getSessionCount(session.realm, rpcArgsL)
+            data = { WAMP_MSG_SPEC.RESULT, requestId, details, sessList }
+
         elseif rpcUri == 'wamp.session.get' then
+
+            local sessionInfo = store:getSession(rpcArgsL[1])
+            if sessionInfo ~= nil then
+
+                local res = {}
+                if sessionInfo.authInfo then
+                    res = sessionInfo.authInfo
+                end
+                res.session = sessionInfo.sessId
+                -- TODO Add transport info
+
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { res } }
+            else
+                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_session" }
+            end
+
         elseif rpcUri == 'wamp.subscription.list' then
         elseif rpcUri == 'wamp.subscription.lookup' then
         elseif rpcUri == 'wamp.subscription.match' then
@@ -288,25 +326,13 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
         elseif rpcUri == 'wamp.registration.list_callees' then
         elseif rpcUri == 'wamp.registration.count_callees' then
         else
-            self:_putData(session, {
-                WAMP_MSG_SPEC.ERROR,
-                WAMP_MSG_SPEC.CALL,
-                requestId,
-                setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.invalid_uri"
-            })
+            data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.invalid_uri" }
         end
     else
-        self:_putData(session, {
-            WAMP_MSG_SPEC.ERROR,
-            WAMP_MSG_SPEC.CALL,
-            requestId,
-            setmetatable({}, { __jsontype = 'object' }),
-            "wamp.error.no_suitable_callee"
-        })
+        data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_suitable_callee" }
     end
 
-
+    self:_putData(session, data)
 end
 
 --
@@ -470,6 +496,7 @@ function _M:receiveData(regId, data)
                 session.isWampEstablished = 1
                 session.realm = challenge.realm
                 session.wampFeatures = challenge.wampFeatures
+                session.authInfo = authInfo
                 store:changeSession(regId, session)
                 store:addSessionToRealm(regId, challenge.realm)
 
