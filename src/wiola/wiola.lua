@@ -85,7 +85,12 @@ local WAMP_MSG_SPEC = {
     YIELD = 70
 }
 
--- Check for a value in table
+---
+--- Check for a value in table
+---
+--- @param tab table Source table
+--- @param val any Value to search
+---
 local has = function(tab, val)
     for _, value in ipairs(tab) do
         if value == val then
@@ -96,11 +101,11 @@ local has = function(tab, val)
     return false
 end
 
---
--- Create a new instance
---
--- returns wiola instance
---
+---
+--- Create a new instance
+---
+--- @return wiola instance
+---
 function _M.new()
     local self = setmetatable({}, _M)
     local ok, err = store:init(config)
@@ -112,7 +117,12 @@ function _M.new()
 
 end
 
--- Generate a random string
+---
+--- Generate a random string
+---
+--- @param length number String length
+--- @return string random string
+---
 function _M:_randomString(length)
     local str = {};
     math.randomseed(math.floor(ngx.now()*1000))
@@ -123,7 +133,14 @@ function _M:_randomString(length)
     return table.concat(str)
 end
 
--- Validate uri for WAMP requirements
+---
+--- Validate uri for WAMP requirements
+---
+--- @param uri string uri to validate
+--- @param patternBased boolean allow wamp pattern based syntax or no
+--- @param allowWAMP boolean allow wamp special prefixed uris or no
+--- @return boolean is uri valid?
+---
 function _M:_validateURI(uri, patternBased, allowWAMP)
     local re = "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$"
     local rePattern = "^([0-9a-zA-Z_]{2,}\\.{1,2})*([0-9a-zA-Z_]{2,})$"
@@ -148,14 +165,14 @@ function _M:_validateURI(uri, patternBased, allowWAMP)
     end
 end
 
---
--- Add connection to wiola
---
--- sid - nginx session connection ID
--- wampProto - chosen WAMP protocol
---
--- returns WAMP session registration ID, connection data type
---
+---
+--- Add connection to wiola
+---
+--- @param sid number nginx session connection ID
+--- @param wampProto string chosen WAMP protocol
+---
+--- @return number, string WAMP session registration ID, connection data type
+---
 function _M:addConnection(sid, wampProto)
     local regId = store:getRegId()
     local dataType
@@ -184,7 +201,12 @@ function _M:addConnection(sid, wampProto)
     return regId, dataType
 end
 
--- Prepare data for sending to client
+---
+--- Prepare data for sending to client
+---
+--- @param session table Session object
+--- @param data any Client data
+---
 function _M:_putData(session, data)
     local dataObj = serializers[session.encoding].encode(data)
 
@@ -193,7 +215,16 @@ function _M:_putData(session, data)
     ngx.log(ngx.DEBUG, "Pushed data for client into store")
 end
 
--- Publish event to sessions
+---
+--- Publish event to sessions
+---
+--- @param sessRegIds table Array of session Ids
+--- @param subId number Session Id of publisher
+--- @param pubId number Publication Id
+--- @param details table Details hash-table
+--- @param args table Array-like payload
+--- @param argsKW table Object-like payload
+---
 function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict,
@@ -218,7 +249,13 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
     end
 end
 
--- Publish META event to sessions
+---
+--- Publish META event to sessions
+---
+--- @param part string META API section name
+--- @param eventUri string event uri
+--- @param session table session object
+---
 function _M:_publishMetaEvent(part, eventUri, session, ...)
     if not config.metaAPI[part] then
         return
@@ -279,7 +316,16 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
     self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
 end
 
--- Process Call META RPC
+---
+--- Process Call META RPC
+---
+--- @param part string META API section name
+--- @param rpcUri string rpc uri
+--- @param session table session object
+--- @param requestId number request Id
+--- @param rpcArgsL table Array-like payload
+--- @param rpcArgsKw table Object-like payload
+---
 function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
     local data
     local details = setmetatable({}, { __jsontype = 'object' })
@@ -319,6 +365,9 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             data = { WAMP_MSG_SPEC.RESULT, requestId, details, subsIds }
 
         elseif rpcUri == 'wamp.subscription.lookup' then
+
+
+
         elseif rpcUri == 'wamp.subscription.match' then
         elseif rpcUri == 'wamp.subscription.get' then
         elseif rpcUri == 'wamp.subscription.list_subscribers' then
@@ -339,12 +388,12 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
     self:_putData(session, data)
 end
 
---
--- Receive data from client
---
--- regId - WAMP session registration ID
--- data - data, received through websocket
---
+---
+--- Receive data from client
+---
+--- @param regId number WAMP session registration ID
+--- @param data any data, received through websocket
+---
 function _M:receiveData(regId, data)
     local session = store:getSession(regId)
 
@@ -947,24 +996,24 @@ function _M:receiveData(regId, data)
     ngx.log(ngx.DEBUG, "Exiting receiveData()")
 end
 
---
--- Retrieve data, available for session
---
--- regId - WAMP session registration ID
---
--- returns first WAMP message from the session data queue
---
+---
+--- Retrieve data, available for session
+---
+--- @param regId number WAMP session registration ID
+---
+--- @return any first WAMP message from the session data queue
+---
 function _M:getPendingData(regId)
     return store:getPendingData(regId)
 end
 
---
--- Process lightweight publish POST data from client
---
--- sid - nginx session connection ID
--- realm - WAMP Realm to operate in
--- data - data, received through POST
---
+---
+--- Process lightweight publish POST data from client
+---
+--- @param sid number nginx session connection ID
+--- @param realm string WAMP Realm to operate in
+--- @param data any data, received through POST
+---
 function _M:processPostData(sid, realm, data)
 
     ngx.log(ngx.DEBUG, "Received POST data for processing in realm ", realm, ":", data)
