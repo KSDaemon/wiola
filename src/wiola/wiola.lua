@@ -142,8 +142,8 @@ end
 --- @return boolean is uri valid?
 ---
 function _M:_validateURI(uri, patternBased, allowWAMP)
-    local re = "^([0-9a-zA-Z_]{2,}\\.)*([0-9a-zA-Z_]{2,})$"
-    local rePattern = "^([0-9a-zA-Z_]{2,}\\.{1,2})*([0-9a-zA-Z_]{2,})$"
+    local re = "^([0-9a-zA-Z_]+\\.)*([0-9a-zA-Z_]+)$"
+    local rePattern = "^([0-9a-zA-Z_]+\\.{1,2})*([0-9a-zA-Z_]+)$"
 
     if patternBased == true then
         re = rePattern
@@ -154,7 +154,7 @@ function _M:_validateURI(uri, patternBased, allowWAMP)
 
     if not m then
         return false
-    elseif string.find(uri, 'wamp.') == 1 then
+    elseif string.find(uri, 'wamp%.') == 1 then
         if allowWAMP ~= true then
             return false
         else
@@ -689,8 +689,14 @@ function _M:receiveData(regId, data)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4], false, true) then
-                local subscriptionId, isNewSubscription = store:subscribeSession(session.realm, dataObj[4], regId)
+            local patternBased = false
+            if dataObj[3].match then
+                patternBased = true
+            end
+
+            if self:_validateURI(dataObj[4], patternBased, true) then
+                local subscriptionId, isNewSubscription = store:subscribeSession(
+                        session.realm, dataObj[4], dataObj[3], regId)
 
                 -- WAMP SPEC: [SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]
                 self:_putData(session, { WAMP_MSG_SPEC.SUBSCRIBED, dataObj[2], subscriptionId })
@@ -787,6 +793,10 @@ function _M:receiveData(regId, data)
                         local calleeSess = store:getSession(rpcInfo.calleeSesId)
                         local invReqId = store:getRegId()
 
+                        if rpcInfo.options and rpcInfo.options.procedure then
+                            details.procedure = rpcInfo.options.procedure
+                        end
+
                         if dataObj[3].timeout ~= nil and
                         dataObj[3].timeout > 0 and
                         calleeSess.wampFeatures.callee.features.call_timeout == true and
@@ -864,7 +874,12 @@ function _M:receiveData(regId, data)
     elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then
         -- WAMP SPEC: [REGISTER, Request|id, Options|dict, Procedure|uri]
         if session.isWampEstablished == 1 then
-            if self:_validateURI(dataObj[4], false, false) then
+            local patternBased = false
+            if dataObj[3].match then
+                patternBased = true
+            end
+
+            if self:_validateURI(dataObj[4], patternBased, false) then
 
                 local registrationId = store:registerSessionRPC(session.realm, dataObj[4], dataObj[3], regId)
 

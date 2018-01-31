@@ -36,6 +36,53 @@ local arrayIndexOf = function(t, obj)
 end
 
 ---
+--- Find URI in pattern based (prefix and wildcard) uri list
+---
+---
+--- @param uriList table URI list (RPCs or Topics)
+--- @param uri string Uri to find
+---
+local findPatternedUri = function(uriList, uri)
+    local comp = function(p1,p2)
+        if string.len(p1) > string.len(p2) then -- reverse sort
+            return true
+        else
+            return false
+        end
+    end
+    table.sort(uriList, comp)
+
+    -- trying to find prefix matched rpc
+    for _, value in ipairs(uriList) do
+        ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", "^" .. string.gsub(value, "%.", "%%.") .. "%.")
+        if string.match(uri, "^" .. string.gsub(value, "%.", "%%.") .. "%.") then
+            ngx.log(ngx.DEBUG, "Found match: ", value, " in ", uri)
+            return value
+        end
+    end
+
+    ngx.log(ngx.DEBUG, "Not found any prefix match")
+
+    -- trying to find wildcard matched rpc
+    for _, value in ipairs(uriList) do
+        local dots = string.find(value, "..", 1, true)
+
+        if dots ~= nil then    -- it's wildcard uri
+            local re = string.sub(value, 1, dots) .. "[0-9a-zA-Z_]+" .. string.sub(value, dots + 1)
+            re = "^" .. string.gsub(re, "%.", "%%.") .. "$"
+            ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", re)
+
+            if string.match(uri, re) then
+                ngx.log(ngx.DEBUG, "Found match: ", value, " in ", uri)
+                return value
+            end
+        end
+    end
+
+    return nil
+end
+
+---
 --- Initialize store connection
 ---
 --- @param cfg table store configuration
@@ -283,21 +330,27 @@ end
 ---
 --- @param realm string session realm
 --- @param uri string subscription uri
+--- @param options table subscription options
 --- @param regId number session registration Id
 ---
-function _M:subscribeSession(realm, uri, regId)
-    local subscriptionId = tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
+function _M:subscribeSession(realm, uri, options, regId)
+    local subscriptionIdStr = redis:hget("wiRealm" .. realm .. "Subs", uri)
+    local subscriptionId = tonumber(subscriptionIdStr)
     local isNewSubscription = false
+    local regIdStr = formatNumber(regId)
 
     if not subscriptionId then
         subscriptionId = self:getRegId()
         isNewSubscription = true
-        local subscriptionIdStr = formatNumber(subscriptionId)
+        subscriptionIdStr = formatNumber(subscriptionId)
         redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
         redis:hset("wiRealm" .. realm .. "RevSubs", subscriptionIdStr, uri)
     end
 
-    redis:sadd("wiRealm" .. realm .. "Sub" .. uri .. "Sessions", formatNumber(regId))
+    redis:hmset("wiRealm" .. realm .. "Sub" .. uri .. "Session" .. regIdStr,
+        "subscriptionId", subscriptionIdStr,
+        "matchPolicy", options.match or "exact")
+    redis:sadd("wiRealm" .. realm .. "Sub" .. uri .. "Sessions", regIdStr)
 
     return subscriptionId, isNewSubscription
 end
@@ -319,6 +372,7 @@ function _M:unsubscribeSession(realm, subscId, regId)
     local wasTopicRemoved = false
 
     redis:srem("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions", regIdStr)
+    redis:del("wiRealm" .. realm .. "Sub" .. subscr .. "Session" .. regIdStr)
     if redis:scard("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions") == 0 then
         redis:del("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions")
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
@@ -522,7 +576,33 @@ end
 --- @return table RPC object
 ---
 function _M:getRPC(realm, uri)
-    local rpc = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "RPC" .. uri))
+    local rpc = redis:hgetall("wiRealm" .. realm .. "RPC" .. uri)
+
+    if #rpc < 2 then -- no exactly matched rpc uri found
+
+        ngx.log(ngx.DEBUG, "no exactly matched rpc uri found")
+        local allRPCs = redis:smembers("wiRealm" .. realm .. "RPCs")
+        local patternRPCs = {}
+
+        for _, value in ipairs(allRPCs) do
+            local rp = redis:hget("wiRealm" .. realm .. "RPC" .. value, "matchPolicy")
+            if rp ~= ngx.null and rp ~= "exact" then
+                table.insert(patternRPCs, value)
+            end
+        end
+        local matchedUri = findPatternedUri(patternRPCs, uri)
+
+        ngx.log(ngx.DEBUG, "matchedUri: ", matchedUri, " found for ", uri)
+        if matchedUri then
+            rpc = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "RPC" .. matchedUri))
+            rpc.options = { procedure = uri }
+        else
+            return nil
+        end
+    else
+        rpc = redis:array_to_hash(rpc)
+    end
+
     rpc.calleeSesId = tonumber(rpc.calleeSesId)
     rpc.registrationId = tonumber(rpc.registrationId)
     return rpc
@@ -548,7 +628,8 @@ function _M:registerSessionRPC(realm, uri, options, regId)
         redis:sadd("wiRealm" .. realm .. "RPCs", uri)
         redis:hmset("wiRealm" .. realm .. "RPC" .. uri,
             "calleeSesId", regIdStr,
-            "registrationId", registrationIdStr)
+            "registrationId", registrationIdStr,
+            "matchPolicy", options.match or "exact")
 
         if options.disclose_caller ~= nil and options.disclose_caller == true then
             redis:hmset("wiRPC" .. uri, "disclose_caller", true)
