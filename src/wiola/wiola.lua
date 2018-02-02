@@ -23,17 +23,19 @@ local wamp_features = {
     roles = {
         broker = {
             features = {
-                subscriber_blackwhite_listing = true,
+                pattern_based_subscription = true,
                 publisher_exclusion = true,
-                publisher_identification = true
+                publisher_identification = true,
+                subscriber_blackwhite_listing = true
             }
         },
         dealer = {
             features = {
-                caller_identification = true,
-                progressive_call_results = true,
                 call_canceling = true,
-                call_timeout = true
+                call_timeout = true,
+                caller_identification = true,
+                pattern_based_registration = true,
+                progressive_call_results = true
             }
         }
     }
