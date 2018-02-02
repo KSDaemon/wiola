@@ -41,8 +41,12 @@ end
 ---
 --- @param uriList table URI list (RPCs or Topics)
 --- @param uri string Uri to find
+--- @param all boolean Return all matches or just first
+--- @return table array of matched URIs
 ---
-local findPatternedUri = function(uriList, uri)
+local findPatternedUri = function(uriList, uri, all)
+    local matchedUris = {}
+
     local comp = function(p1,p2)
         if string.len(p1) > string.len(p2) then -- reverse sort
             return true
@@ -52,18 +56,22 @@ local findPatternedUri = function(uriList, uri)
     end
     table.sort(uriList, comp)
 
-    -- trying to find prefix matched rpc
+    -- trying to find prefix matched uri
     for _, value in ipairs(uriList) do
         ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", "^" .. string.gsub(value, "%.", "%%.") .. "%.")
         if string.match(uri, "^" .. string.gsub(value, "%.", "%%.") .. "%.") then
-            ngx.log(ngx.DEBUG, "Found match: ", value, " in ", uri)
-            return value
+            ngx.log(ngx.DEBUG, "Found match: ", uri, " in ", value)
+            if all then
+                table.insert(matchedUris, value)
+            else
+                return { value }
+            end
         end
     end
 
     ngx.log(ngx.DEBUG, "Not found any prefix match")
 
-    -- trying to find wildcard matched rpc
+    -- trying to find wildcard matched uri
     for _, value in ipairs(uriList) do
         local dots = string.find(value, "..", 1, true)
 
@@ -73,13 +81,17 @@ local findPatternedUri = function(uriList, uri)
             ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", re)
 
             if string.match(uri, re) then
-                ngx.log(ngx.DEBUG, "Found match: ", value, " in ", uri)
-                return value
+                ngx.log(ngx.DEBUG, "Found match: ", uri, " in ", value)
+                if all then
+                    table.insert(matchedUris, value)
+                else
+                    return { value }
+                end
             end
         end
     end
 
-    return nil
+    return matchedUris
 end
 
 ---
@@ -406,11 +418,89 @@ end
 function _M:getEventRecipients(realm, uri, regId, options)
 
     local regIdStr = formatNumber(regId)
+    local recipients = {}
+    local details = {}
+
+    local exactSubsIdStr = redis:hget("wiRealm" .. realm .. "Subs", uri)
+    local exactSubsId = tonumber(exactSubsIdStr)
+
+    if options.disclose_me ~= nil and options.disclose_me == true then
+        details.publisher = regId
+    end
+
+    if type(exactSubsId) == "number" and exactSubsId > 0 then
+
+        -- we need to find sessions with exact subscription
+        local ss = redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
+        local exactSessions = {}
+
+        for _, sesValue in ipairs(ss) do
+            local matchPolicy = redis:hget("wiRealm" .. realm .. "Sub" .. uri .. "Session" .. sesValue,
+                    "matchPolicy")
+            if matchPolicy == "exact" then
+                table.insert(exactSessions, sesValue)
+            end
+        end
+
+        if #exactSessions > 0 then
+
+            table.insert(recipients, {
+                subId = exactSubsId,
+                sessions = self:filterEventRecipients(regIdStr, options, exactSessions),
+                details = details
+            })
+        end
+    end
+
+    -- Now lets find all patternBased subscriptions and their sessions
+    local allSubs = redis:hkeys("wiRealm" .. realm .. "Subs")
+    local matchedUris = findPatternedUri(allSubs, uri)
+
+    details.topic = uri
+
+    -- now we need to find sessions within matched Subs with pattern based subscription
+    for _, uriValue in ipairs(matchedUris) do
+        local ss = redis:smembers("wiRealm" .. realm .. "Sub" .. uriValue .. "Sessions")
+        local patternSessions = {}
+
+        for _, sesValue in ipairs(ss) do
+            local matchPolicy = redis:hget("wiRealm" .. realm .. "Sub" .. uriValue .. "Session" .. sesValue,
+                    "matchPolicy")
+            if matchPolicy ~= "exact" then
+                table.insert(patternSessions, sesValue)
+            end
+        end
+
+        if #patternSessions > 0 then
+
+            table.insert(recipients, {
+                subId = tonumber(redis:hget("wiRealm" .. realm .. "Subs", uriValue)),
+                sessions = self:filterEventRecipients(regIdStr, options, patternSessions),
+                details = details
+            })
+        end
+    end
+
+    return recipients
+end
+
+---
+--- Filter subscribers in subscription for event
+---
+--- @param regIdStr string session registration Id (as string)
+--- @param options table advanced profile options
+--- @param sessionsIdList table subscribers sessions Id list
+--- @return table array of session Ids to deliver event
+---
+function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     local recipients
+
     local tmpK = "wiSes" .. regIdStr .. "TmpSetK"
     local tmpL = "wiSes" .. regIdStr .. "TmpSetL"
 
-    redis:sdiffstore(tmpK, "wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
+    for _, v in ipairs(sessionsIdList) do
+        redis:sadd(tmpK, formatNumber(v))
+    end
 
     if options.eligible then -- There is eligible list
         ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
@@ -501,7 +591,7 @@ function _M:getEventRecipients(realm, uri, regId, options)
     end
 
     if options.exclude_me == nil or options.exclude_me == true then
-        redis:sadd(tmpL, regId)
+        redis:sadd(tmpL, regIdStr)
         redis:sdiffstore(tmpK, tmpK, tmpL)
         redis:del(tmpL)
     end
@@ -590,7 +680,7 @@ function _M:getRPC(realm, uri)
                 table.insert(patternRPCs, value)
             end
         end
-        local matchedUri = findPatternedUri(patternRPCs, uri)
+        local matchedUri = findPatternedUri(patternRPCs, uri, false)[1]
 
         ngx.log(ngx.DEBUG, "matchedUri: ", matchedUri, " found for ", uri)
         if matchedUri then

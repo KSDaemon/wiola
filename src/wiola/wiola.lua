@@ -219,7 +219,7 @@ end
 --- Publish event to sessions
 ---
 --- @param sessRegIds table Array of session Ids
---- @param subId number Session Id of publisher
+--- @param subId number Subscription Id
 --- @param pubId number Publication Id
 --- @param details table Details hash-table
 --- @param args table Array-like payload
@@ -654,16 +654,10 @@ function _M:receiveData(regId, data)
             if self:_validateURI(dataObj[4], false, false) then
                 local pubId = store:getRegId()
                 local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, dataObj[3])
-                local details = {}
 
-                if dataObj[3].disclose_me ~= nil and dataObj[3].disclose_me == true then
-                    details.publisher = regId
-                end
-
-                local subId = store:getSubscriptionId(session.realm, dataObj[4])
-                if subId then
-                    ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(subId))
-                    self:_publishEvent(recipients, subId, pubId, details, dataObj[5], dataObj[6])
+                for _, v in ipairs(recipients) do
+                    ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(v.subId))
+                    self:_publishEvent(v.sessions, v.subId, pubId, v.details, dataObj[5], dataObj[6])
 
                     if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
                         -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
