@@ -58,7 +58,30 @@ end
 
 while true do
 --    ngx.log(ngx.DEBUG, "Started handler loop!")
-    local cliData, data, typ
+    local cliData, data, typ, hflags
+
+    hflags = wampServer:getHandlerFlags(sessionId)
+    if hflags ~= nil then
+        if hflags.sendLast == true then
+            cliData = wampServer:getPendingData(sessionId, true)
+
+            if dataType == 'binary' then
+                bytes, err = webSocket:send_binary(cliData)
+            else
+                bytes, err = webSocket:send_text(cliData)
+            end
+
+            if not bytes then
+                ngx.log(ngx.ERR, "Failed to send data: ", err)
+            end
+        end
+
+        if hflags.close == true then
+            ngx.log(ngx.DEBUG, "Got close connection flag for session")
+            ngx.timer.at(0, removeConnection, sessionId)
+            return ngx.exit(444)
+        end
+    end
 
 --    ngx.log(ngx.DEBUG, "Checking data for client...")
     cliData = wampServer:getPendingData(sessionId)

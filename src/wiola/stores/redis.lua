@@ -270,10 +270,42 @@ end
 --- Retrieve data, available for session
 ---
 --- @param regId number session registration Id
+--- @param last boolean return from the end of a queue
 --- @return any client data
 ---
-function _M:getPendingData(regId)
-    return redis:lpop("wiSes" .. formatNumber(regId) .. "Data")
+function _M:getPendingData(regId, last)
+    if last == true then
+        return redis:rpop("wiSes" .. formatNumber(regId) .. "Data")
+    else
+        return redis:lpop("wiSes" .. formatNumber(regId) .. "Data")
+    end
+end
+
+---
+--- Set connection handler flags for session
+---
+--- @param regId number session registration Id
+--- @param flags table flags data
+---
+function _M:setHandlerFlags(regId, flags)
+    return redis:hmset("wiSes" .. formatNumber(regId) .. "HandlerFlags", flags)
+end
+
+---
+--- Retrieve connection handler flags, set up for session
+---
+--- @param regId number session registration Id
+--- @return table flags data
+---
+function _M:getHandlerFlags(regId)
+    local flarr = redis:hgetall("wiSes" .. formatNumber(regId) .. "HandlerFlags")
+    if #flarr > 0 then
+        local fl = redis:array_to_hash(flarr)
+
+        return fl
+    else
+        return nil
+    end
 end
 
 ---

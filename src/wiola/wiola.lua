@@ -411,8 +411,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
             local realm = dataObj[2]
@@ -523,8 +524,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
 
@@ -591,8 +593,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
         end
         self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
     elseif dataObj[1] == WAMP_MSG_SPEC.ERROR then
@@ -679,8 +682,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.SUBSCRIBE then -- WAMP SPEC: [SUBSCRIBE, Request|id, Options|dict, Topic|uri]
@@ -715,8 +719,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNSUBSCRIBE then
@@ -743,8 +748,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.CALL then
@@ -863,8 +869,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.REGISTER then
@@ -909,8 +916,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.UNREGISTER then
@@ -938,8 +946,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.YIELD then
@@ -973,8 +982,9 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.CANCEL then
@@ -998,10 +1008,20 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.system_shutdown"
+                "wamp.error.protocol_violation"
             })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         end
+    else
+        -- Received non-compliant WAMP message
+        -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+        self:_putData(session, {
+            WAMP_MSG_SPEC.ABORT,
+            setmetatable({}, { __jsontype = 'object' }),
+            "wamp.error.protocol_violation"
+        })
+        store:setHandlerFlags(regId, { close = true, sendLast = true })
     end
 
     ngx.log(ngx.DEBUG, "Exiting receiveData()")
@@ -1011,12 +1031,25 @@ end
 --- Retrieve data, available for session
 ---
 --- @param regId number WAMP session registration ID
+--- @param last boolean return from the end of a queue
 ---
 --- @return any first WAMP message from the session data queue
 ---
-function _M:getPendingData(regId)
-    return store:getPendingData(regId)
+function _M:getPendingData(regId, last)
+    return store:getPendingData(regId, last)
 end
+
+---
+--- Retrieve connection handler flags, set up for session
+---
+--- @param regId number WAMP session registration ID
+---
+--- @return table flags data table
+---
+function _M:getHandlerFlags(regId)
+    return store:getHandlerFlags(regId)
+end
+
 
 ---
 --- Process lightweight publish POST data from client
