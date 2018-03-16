@@ -409,8 +409,8 @@ function _M:receiveData(regId, data)
             -- Protocol error: received second hello message - aborting
             -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received WELCOME message after session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -522,8 +522,8 @@ function _M:receiveData(regId, data)
             -- Protocol error: received second message - aborting
             -- WAMP SPEC: [GOODBYE, Details|dict, Reason|uri]
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received AUTHENTICATE message after session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -591,8 +591,8 @@ function _M:receiveData(regId, data)
             })
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received GOODBYE message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -650,6 +650,13 @@ function _M:receiveData(regId, data)
 
                 store:removeInvocation(dataObj[3])
             end
+        else
+            self:_putData(session, {
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received ERROR message before session was established' },
+                "wamp.error.protocol_violation"
+            })
+            store:setHandlerFlags(regId, { close = true, sendLast = true })
         end
     elseif dataObj[1] == WAMP_MSG_SPEC.PUBLISH then
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri]
@@ -680,8 +687,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received PUBLISH message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -717,8 +724,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received SUBSCRIBE message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -746,8 +753,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received UNSUBSCRIBE message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -867,8 +874,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received CALL message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -914,8 +921,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received REGISTER message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -944,8 +951,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received UNREGISTER message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -980,8 +987,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received YIELD message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -1006,8 +1013,8 @@ function _M:receiveData(regId, data)
             end
         else
             self:_putData(session, {
-                WAMP_MSG_SPEC.GOODBYE,
-                setmetatable({}, { __jsontype = 'object' }),
+                WAMP_MSG_SPEC.ABORT,
+                { message = 'Received CANCEL message before session was established' },
                 "wamp.error.protocol_violation"
             })
             store:setHandlerFlags(regId, { close = true, sendLast = true })
@@ -1018,7 +1025,7 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
         self:_putData(session, {
             WAMP_MSG_SPEC.ABORT,
-            setmetatable({}, { __jsontype = 'object' }),
+            { message = 'Received non-compliant WAMP message' },
             "wamp.error.protocol_violation"
         })
         store:setHandlerFlags(regId, { close = true, sendLast = true })
