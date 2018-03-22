@@ -587,7 +587,7 @@ function _M:receiveData(regId, data)
             self:_putData(session, {
                 WAMP_MSG_SPEC.GOODBYE,
                 setmetatable({}, { __jsontype = 'object' }),
-                "wamp.error.goodbye_and_out"
+                "wamp.close.goodbye_and_out"
             })
         else
             self:_putData(session, {
