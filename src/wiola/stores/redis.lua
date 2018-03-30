@@ -48,7 +48,12 @@ local findPatternedUri = function(uriList, uri, all)
     local matchedUris = {}
 
     local comp = function(p1,p2)
-        if string.len(p1) > string.len(p2) then -- reverse sort
+        local _, p1c, p2c
+
+        _, p1c = string.gsub(p1, "%.", "")
+        _, p2c = string.gsub(p2, "%.", "")
+
+        if p1c > p2c then -- reverse sort
             return true
         else
             return false
