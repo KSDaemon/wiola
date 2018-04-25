@@ -76,13 +76,44 @@ local findPatternedUri = function(uriList, uri, all)
 
     ngx.log(ngx.DEBUG, "Not found any prefix match")
 
+    local compWldCrd
+    compWldCrd = function(p1,p2)
+        local _, p1c, p2c, p1v, p2v, p1dots, p2dots, p1l, p2l
+
+        p1l = string.len(p1)
+        p2l = string.len(p2)
+
+        if p1l == 0 and p2l > 0 then
+            return false
+        elseif p2l == 0 and p1l > 0 then
+            return true
+        elseif p1l == 0 and p2l == 0 then
+            return true
+        end
+
+        p1dots = string.find(p1, "..", 1, true) or p1l
+        p2dots = string.find(p2, "..", 1, true) or p2l
+        p1v = string.sub(p1, 1, p1dots)
+        p2v = string.sub(p2, 1, p2dots)
+        _, p1c = string.gsub(p1v, "%.", "")
+        _, p2c = string.gsub(p2v, "%.", "")
+
+        if p1c > p2c then -- reverse sort
+            return true
+        elseif p1c < p2c then
+            return false
+        else
+            return compWldCrd(string.sub(p1, p1dots+2), string.sub(p2, p2dots+2))
+        end
+    end
+    table.sort(uriList, compWldCrd)
+
     -- trying to find wildcard matched uri
     for _, value in ipairs(uriList) do
-        local dots = string.find(value, "..", 1, true)
+        local replUri, c = string.gsub(value, "%.%.", ".[0-9a-zA-Z_]+.")
 
-        if dots ~= nil then    -- it's wildcard uri
-            local re = string.sub(value, 1, dots) .. "[0-9a-zA-Z_]+" .. string.sub(value, dots + 1)
-            re = "^" .. string.gsub(re, "%.", "%%.") .. "$"
+        if c ~= nil then    -- it's wildcard uri
+            local re = "^" .. string.gsub(replUri, "%.", "%%.") .. "$"
             ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", re)
 
             if string.match(uri, re) then
