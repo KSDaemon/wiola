@@ -234,6 +234,7 @@ function _M:removeSession(regId)
 
     for k, v in pairs(subscriptions) do
         redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regIdStr)
+        redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Session" .. regIdStr)
         if redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
             redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
             redis:hdel("wiRealm" .. session.realm .. "Subs",k)
@@ -469,6 +470,38 @@ end
 --- Get sessions subscribed to topic
 ---
 --- @param realm string realm
+--- @param subscId number subscription Id
+--- @return table array of session Ids subscribed to subscription
+---
+function _M:getTopicSessionsBySubId(realm, subscId)
+    local uri = redis:hget("wiRealm" .. realm .. "RevSubs", formatNumber(subscId))
+    if uri ~= ngx.null then
+        return redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
+    else
+        return nil
+    end
+end
+
+---
+--- Get count of sessions subscribed to topic
+---
+--- @param realm string realm
+--- @param subscId number subscription Id
+--- @return table array of session Ids subscribed to subscription
+---
+function _M:getTopicSessionsCountBySubId(realm, subscId)
+    local uri = redis:hget("wiRealm" .. realm .. "RevSubs", formatNumber(subscId))
+    if uri ~= ngx.null then
+        return redis:scard("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
+    else
+        return nil
+    end
+end
+
+---
+--- Get sessions subscribed to topic
+---
+--- @param realm string realm
 --- @param uri string subscription uri
 --- @return table array of session Ids subscribed to topic
 ---
@@ -688,49 +721,6 @@ function _M:getSubscriptions(realm)
     --end
 
     return subsIds
-end
-
----
---- Remove subscription data from runtime store
----
---- @param regId number subscription registration Id
----
-function _M:removeSubscription(regId)
-    local regIdStr = formatNumber(regId)
-
-    local subscription = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr))
-    subscription.realm = subscription.realm or ""
-
-    local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. subscription.realm .. "Subs"))
-
-    for k, v in pairs(subscriptions) do
-        redis:srem("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions", regIdStr)
-        if redis:scard("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions") == 0 then
-            redis:del("wiRealm" .. subscription.realm .. "Sub" .. k .. "Subscriptions")
-            redis:hdel("wiRealm" .. subscription.realm .. "Subs",k)
-            redis:hdel("wiRealm" .. subscription.realm .. "RevSubs",v)
-        end
-    end
-
-    local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
-
-    for k, _ in pairs(rpcs) do
-        redis:srem("wiRealm" .. subscription.realm .. "RPCs",k)
-        redis:del("wiRPC" .. k)
-    end
-
-    redis:del("wiSes" .. regIdStr .. "RPCs")
-    redis:del("wiSes" .. regIdStr .. "RevRPCs")
-    redis:del("wiSes" .. regIdStr .. "Challenge")
-
-    redis:srem("wiRealm" .. subscription.realm .. "Subscriptions", regIdStr)
-    if redis:scard("wiRealm" .. subscription.realm .. "Subscriptions") == 0 then
-        redis:srem("wiolaRealms",subscription.realm)
-    end
-
-    redis:del("wiSes" .. regIdStr .. "Data")
-    redis:del("wiSes" .. regIdStr)
-    redis:srem("wiolaIds",regIdStr)
 end
 
 ---

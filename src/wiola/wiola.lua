@@ -334,6 +334,8 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 
     if config.metaAPI[part] == true then
 
+        ngx.log(ngx.DEBUG, "Processing Call to META RPC '", rpcUri, "'")
+
         if rpcUri == 'wamp.session.count' then
 
             local count = store:getSessionCount(session.realm, rpcArgsL)
@@ -363,25 +365,90 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 
         elseif rpcUri == 'wamp.subscription.list' then
 
-            -- TODO Implement rpcUri == 'wamp.subscription.list'.
-            -- Not fully implemented, need to count subs due to matching policy
+            -- TODO Implement rpcUri == 'wamp.subscription.list'
+            -- need to count subs due to matching policy
             --local subsIds = store:getSubscriptions(session.realm)
             --data = { WAMP_MSG_SPEC.RESULT, requestId, details, subsIds }
 
         elseif rpcUri == 'wamp.subscription.lookup' then
 
-
+            -- TODO Implement rpcUri == 'wamp.subscription.lookup'
 
         elseif rpcUri == 'wamp.subscription.match' then
+
+            local subId = store:getSubscriptionId(session.realm, rpcArgsL[1])
+            if subId then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { subId } }
+            else
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details}
+            end
+
         elseif rpcUri == 'wamp.subscription.get' then
+
+            -- TODO Implement rpcUri == 'wamp.subscription.get'
+
         elseif rpcUri == 'wamp.subscription.list_subscribers' then
+
+            local sessList = store:getTopicSessionsBySubId(session.realm, rpcArgsL[1])
+            if sessList ~= nil then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, sessList }
+            else
+                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_subscription" }
+            end
+
         elseif rpcUri == 'wamp.subscription.count_subscribers' then
+
+            local sessCount = store:getTopicSessionsCountBySubId(session.realm, rpcArgsL[1])
+            if sessCount ~= nil then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { sessCount } }
+            else
+                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_subscription" }
+            end
+
         elseif rpcUri == 'wamp.registration.list' then
+
+            -- TODO Implement rpcUri == 'wamp.registration.list'
+
         elseif rpcUri == 'wamp.registration.lookup' then
+
+            -- TODO Implement rpcUri == 'wamp.registration.lookup'
+
         elseif rpcUri == 'wamp.registration.match' then
+
+            local rpcInfo = store:getRPC(session.realm, rpcArgsL[1])
+
+            if rpcInfo then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { rpcInfo.registrationId } }
+            else
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details}
+            end
+
         elseif rpcUri == 'wamp.registration.get' then
+
+            -- TODO Implement rpcUri == 'wamp.registration.get'
+
         elseif rpcUri == 'wamp.registration.list_callees' then
+
+            -- TODO Do not forget to update 'wamp.registration.list_callees' while implementing SHARED/SHARDED RPCs
+            local rpcInfo = store:getRPC(session.realm, rpcArgsL[1])
+
+            if rpcInfo then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { rpcInfo.calleeSesId } }
+            else
+                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_registration" }
+            end
+
         elseif rpcUri == 'wamp.registration.count_callees' then
+
+            -- TODO Do not forget to update 'wamp.registration.count_callees' while implementing SHARED/SHARDED RPCs
+            local rpcInfo = store:getRPC(session.realm, rpcArgsL[1])
+
+            if rpcInfo then
+                data = { WAMP_MSG_SPEC.RESULT, requestId, details, { 1 } }
+            else
+                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_registration" }
+            end
+
         else
             data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.invalid_uri" }
         end
