@@ -16,58 +16,81 @@ ws = new Wampy('ws://webxp/ws/', {
     onConnect: function () {
         console.log('+' + (Date.now() - d) + 'ms: Yahoo! We are online!');
         ws.subscribe('wamp.session.on_join', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.session.on_join message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
+                ws.call('wamp.session.count', null, function (result) {
+                    console.log('Received RPC wamp.session.count result!');
+                    console.log(result);
+                });
             }
         }).subscribe('wamp.session.on_leave', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.session.on_leave message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
+                ws.call('wamp.session.count', null, function (result) {
+                    console.log('Received RPC wamp.session.count result!');
+                    console.log(result);
+                });
             }
         }).subscribe('wamp.subscription.on_create', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.subscription.on_create message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
             }
         }).subscribe('wamp.subscription.on_subscribe', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.subscription.on_subscribe message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
+                ws.call('wamp.subscription.list_subscribers', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.subscription.list_subscribers result!');
+                    console.log(result);
+                });
+                ws.call('wamp.subscription.count_subscribers', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.subscription.count_subscribers result!');
+                    console.log(result);
+                });
             }
         }).subscribe('wamp.subscription.on_unsubscribe', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.subscription.on_unsubscribe message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
+                ws.call('wamp.subscription.list_subscribers', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.subscription.list_subscribers result!');
+                    console.log(result);
+                });
+                ws.call('wamp.subscription.count_subscribers', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.subscription.count_subscribers result!');
+                    console.log(result);
+                });
             }
         }).subscribe('wamp.subscription.on_delete', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.subscription.on_delete message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
             }
         }).subscribe('wamp.registration.on_create', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.registration.on_create message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
             }
         }).subscribe('wamp.registration.on_register', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.registration.on_register message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
+                ws.call('wamp.registration.list_callees', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.registration.list_callees result!');
+                    console.log(result);
+                });
+                ws.call('wamp.registration.count_callees', res.argsList[1], function (result) {
+                    console.log('Received RPC wamp.registration.count_callees result!');
+                    console.log(result);
+                });
             }
         }).subscribe('wamp.registration.on_unregister', {
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.registration.on_unregister message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
             }
         }).subscribe('wamp.registration.on_delete', {
             onSuccess: function () {
@@ -87,10 +110,9 @@ ws = new Wampy('ws://webxp/ws/', {
                     });
                 }, 5000);
             },
-            onEvent: function (arrayPayload, objectPayload) {
+            onEvent: function (res) {
                 console.log('Received wamp.registration.on_delete message!');
-                console.log(arrayPayload);
-                console.log(objectPayload);
+                console.log(res);
             }
         });
 

@@ -22,8 +22,8 @@ ws = new Wampy('ws://webxp/ws/', {
                    ws.publish('message.received', ['New message'], null, { exclude_me: false });
                }, 5000);
            },
-           onError: function (err, details) { console.log('+' + (Date.now() - d) + 'ms: Subscription error:' + err); },
-           onEvent: function (arrayPayload, objectPayload) {
+           onError: function (err) { console.log('+' + (Date.now() - d) + 'ms: Subscription error:' + err); },
+           onEvent: function (res) {
                console.log('+' + (Date.now() - d) + 'ms: Received new message!');
                console.log('+' + (Date.now() - d) + 'ms: Closing connection...');
                ws.disconnect();
