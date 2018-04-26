@@ -12,7 +12,6 @@ Table of Contents
 * [Installation](#installation)
 * [Methods](#methods)
     * [configure](#configconfig)
-    * [setupRedis](#setupredis)
     * [addConnection](#addconnectionsid-wampproto)
     * [receiveData](#receivedataregid-data)
     * [getPendingData](#getpendingdataregid)
@@ -28,17 +27,23 @@ Wiola implements [WAMP specification][] v2 router specification on top of OpenRe
  which is actually nginx plus a bunch of 3rd party modules, such as lua-nginx-module, lua-resty-websocket,
  lua-resty-redis and so on.
 
-wiola supports next WAMP roles and features:
+Wiola supports next WAMP roles and features:
 
 * broker: advanced profile with features:
     * subscriber blackwhite listing
     * publisher exclusion
     * publisher identification
+    * session meta api
+    * subscription meta api (partly)
+    * pattern based subscription
 * dealer: advanced profile with features:
     * callee blackwhite listing
     * caller exclusion
     * caller identification
     * progressive call results
+    * session meta api
+    * registration meta api (partly)
+    * pattern based registration
 * Challenge Response Authentication ("WAMP-CRA")
 * Cookie Authentication
 
@@ -97,11 +102,17 @@ http {
                 --port = 6379                     -- Optional parameter. Should be set when using hostname/ip
                                                 -- Omit for socket connection
                 --db = 5                         -- Optional parameter. Redis db to use
+            },
+            metaAPI = {
+                session = true,
+                subscription = true,
+                registration = true
             }
         })
 
         -- If you want automatically clean up redis db during nginx restart uncomment next two lines
         -- for this to work, you need redis-lua library
+        -- Use it only with lua_code_cache on; !!!
         --local wflush = require "wiola.flushdb"
         --wflush.flushAll()
     }
@@ -173,7 +184,11 @@ Parameters:
         Is called on AUTHENTICATE message, passing session ID as first parameter and signature as second one.
         Should return auth info object { authid="user1", authrole="userRole", authmethod="wampcra", authprovider="usersProvider" }
         or nil | false in case of failure.
-
+    * **metaAPI** - Meta API configuration table:
+        * **session** - Expose session meta api? Possible values: true | false. Default: false.
+        * **subscription** - Expose subscription meta api? Possible values: true | false. Default: false.
+        * **registration** - Expose registration meta api? Possible values: true | false. Default: false.
+        
 When called without parameters, returns current configuration.
 When setting configuration, returns nothing.
 
@@ -217,23 +232,16 @@ Config example (multiple options, just for showcase):
                 authCallback = function (sessionid, signature)
                     return { authid="user1", authrole="userRole1", authmethod="wampcra", authprovider="usersProvider" }
                 end
+            },
+            metaAPI = {
+                session = true,
+                subscription = false,
+                registration = false
             }
         })
     }
 ```
 
-
-[Back to TOC](#table-of-contents)
-
-setupRedis()
-------------------------------------------
-
-Initialize connection to Redis server.
-
-Returns:
-
- * **Connection flag** (integer)
- * **Error description** (string) in case of error, nil on success
 
 [Back to TOC](#table-of-contents)
 
