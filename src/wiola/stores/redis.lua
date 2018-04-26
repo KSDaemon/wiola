@@ -425,6 +425,7 @@ function _M:subscribeSession(realm, uri, options, regId)
         subscriptionIdStr = formatNumber(subscriptionId)
         redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
         redis:hset("wiRealm" .. realm .. "RevSubs", subscriptionIdStr, uri)
+        redis:hset("wiRealm" .. realm .. "Sub" .. uri, "exact", 0, "prefix", 0, "wildcard", 0)
     end
 
     redis:hmset("wiRealm" .. realm .. "Sub" .. uri .. "Session" .. regIdStr,
@@ -457,6 +458,7 @@ function _M:unsubscribeSession(realm, subscId, regId)
         redis:del("wiRealm" .. realm .. "Sub" .. subscr .. "Sessions")
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
         redis:hdel("wiRealm" .. realm .. "RevSubs", subscIdStr)
+        redis:del("wiRealm" .. realm .. "Sub" .. subscr)
         wasTopicRemoved = true
     end
 
@@ -679,7 +681,12 @@ end
 function _M:getSubscriptions(realm)
     local subsIds = { exact = {}, prefix = {}, wildcard = {} }
     -- TODO Make count of prefix/wildcard subscriptions
-    subsIds.exact = redis:hkeys("wiRealm" .. realm .. "RevSubs")
+    local allSubs = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "Subs"))
+
+    --for k, v in pairs(allSubs) do
+    --
+    --end
+
     return subsIds
 end
 

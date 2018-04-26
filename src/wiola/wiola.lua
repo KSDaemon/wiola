@@ -363,8 +363,10 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 
         elseif rpcUri == 'wamp.subscription.list' then
 
-            local subsIds = store:getSubscriptions(session.realm)
-            data = { WAMP_MSG_SPEC.RESULT, requestId, details, subsIds }
+            -- TODO Implement rpcUri == 'wamp.subscription.list'.
+            -- Not fully implemented, need to count subs due to matching policy
+            --local subsIds = store:getSubscriptions(session.realm)
+            --data = { WAMP_MSG_SPEC.RESULT, requestId, details, subsIds }
 
         elseif rpcUri == 'wamp.subscription.lookup' then
 
