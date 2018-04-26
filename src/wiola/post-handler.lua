@@ -8,12 +8,6 @@ local wiola = require "wiola"
 local wampServer = wiola:new()
 local realm = "testRealm"
 
-local redisOk, redisErr = wampServer:setupRedis("unix:/tmp/redis.sock")
-if not redisOk then
-    ngx.log(ngx.DEBUG, "Failed to connect to redis: ", redisErr)
-    return ngx.exit(444)
-end
-
 ngx.req.read_body()
 local req = ngx.req.get_body_data()
 

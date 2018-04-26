@@ -27,6 +27,9 @@ local wamp_features = {
                 publisher_exclusion = true,
                 publisher_identification = true,
                 subscriber_blackwhite_listing = true
+                -- meta api are exposing if they are configured (see below)
+                --session_meta_api = true,
+                --subscription_meta_api = true
             }
         },
         dealer = {
@@ -36,6 +39,9 @@ local wamp_features = {
                 caller_identification = true,
                 pattern_based_registration = true,
                 progressive_call_results = true
+                -- meta api are exposing if they are configured (see below)
+                --session_meta_api = true,
+                --registration_meta_api = true
             }
         }
     }
