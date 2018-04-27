@@ -6,8 +6,8 @@
 
 ngx.header["Server"] = "wiola/Lua v0.6.0"
 
-function has(tab, val)
-    for index, value in ipairs (tab) do
+local has = function(tab, val)
+    for _, value in ipairs (tab) do
         if value == val then
             return true
         end
