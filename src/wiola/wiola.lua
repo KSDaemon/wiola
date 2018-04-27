@@ -466,6 +466,17 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 end
 
 ---
+--- Assing trust level for request
+---
+--- @param session table WAMP session issuing request data
+---
+--- @return number Assigned trust level for request
+---
+function _M:_assignTrustLevel(session)
+    return 10
+end
+
+---
 --- Receive data from client
 ---
 --- @param regId number WAMP session registration ID
@@ -740,7 +751,15 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4], false, false) then
                 local pubId = store:getRegId()
-                local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, dataObj[3])
+
+                local options = dataObj[3]
+                if config.trustLevels.authType ~= "none" then
+                    local trustlevel = self:_assignTrustLevel(session)
+                    if trustlevel ~= nil then
+                        options.trustlevel = trustlevel
+                    end
+                end
+                local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, options)
 
                 for _, v in ipairs(recipients) do
                     ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(v.subId))
@@ -879,6 +898,13 @@ function _M:receiveData(regId, data)
 
                         if rpcInfo.options and rpcInfo.options.procedure then
                             details.procedure = rpcInfo.options.procedure
+                        end
+
+                        if config.trustLevels.authType ~= "none" then
+                            local trustlevel = self:_assignTrustLevel(session)
+                            if trustlevel ~= nil then
+                                details.trustlevel = trustlevel
+                            end
                         end
 
                         if dataObj[3].timeout ~= nil and

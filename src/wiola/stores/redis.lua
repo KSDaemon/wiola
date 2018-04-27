@@ -531,6 +531,10 @@ function _M:getEventRecipients(realm, uri, regId, options)
         details.publisher = regId
     end
 
+    if options.trustlevel ~= nil then
+        details.trustlevel = options.trustlevel
+    end
+
     if type(exactSubsId) == "number" and exactSubsId > 0 then
 
         -- we need to find sessions with exact subscription
