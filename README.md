@@ -361,7 +361,7 @@ When called without parameters, returns current configuration.
 When setting configuration, returns nothing.
 
 Config example (multiple options, just for showcase):
-```nginx
+```lua
     init_by_lua_block {
         local cfg = require "wiola.config"
         cfg.config({
