@@ -54,20 +54,21 @@ local wiolaConf = {
     },
     trustLevels = {
         authType = "none",          -- none | static | dynamic
+        defaultTrustLevel = nil,
         staticCredentials = {
             byAuthid = {
-                { authid = "user1", trustlevel = 1 },
-                { authid = "admin1", trustlevel = 5 }
+                --{ authid = "user1", trustlevel = 1 },
+                --{ authid = "admin1", trustlevel = 5 }
             },
             byAuthRole = {
-                { authid = "user-role", trustlevel = 2 },
-                { authid = "admin-role", trustlevel = 4 }
+                --{ authrole = "user-role", trustlevel = 2 },
+                --{ authrole = "admin-role", trustlevel = 4 }
             },
             byClientIp = {
-                { clientip = "127.0.0.1", trustlevel = 10 }
+                --{ clientip = "127.0.0.1", trustlevel = 10 }
             }
         },
-        authCallback = nil -- function that accepts (client ip address, realm, request type (call|publication),
+        authCallback = nil -- function that accepts (client ip address, realm,
                            -- authid, authrole) and returns trust level
     },
     metaAPI = {
@@ -145,6 +146,10 @@ function _M.config(config)
 
         if config.trustLevels.authType ~= nil then
             wiolaConf.trustLevels.authType = config.trustLevels.authType
+        end
+
+        if config.trustLevels.defaultTrustLevel ~= nil then
+            wiolaConf.trustLevels.defaultTrustLevel = config.trustLevels.defaultTrustLevel
         end
 
         if config.trustLevels.staticCredentials ~= nil then

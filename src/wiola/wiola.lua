@@ -7,7 +7,7 @@
 --local getdump = require("debug.vardump").getdump
 
 local _M = {
-    _VERSION = '0.8.0',
+    _VERSION = '0.9.0',
 }
 
 _M.__index = _M
@@ -473,7 +473,67 @@ end
 --- @return number Assigned trust level for request
 ---
 function _M:_assignTrustLevel(session)
-    return 10
+    local trustlevel, wasFound
+    local clientIp = ngx.var.remote_addr
+
+    if config.trustLevels.authType == "static" then
+
+        if session.authInfo and session.authInfo.authid then
+
+            ngx.log(ngx.DEBUG, "Checking trustlevel for client authid '", session.authInfo.authid, "'")
+            for _, value in ipairs(config.trustLevels.staticCredentials.byAuthid) do
+                if session.authInfo.authid == value.authid then
+                    trustlevel = value.trustlevel
+                    wasFound = true
+                end
+            end
+
+            if wasFound then
+                return trustlevel
+            end
+        end
+
+        if session.authInfo and session.authInfo.authrole then
+
+            ngx.log(ngx.DEBUG, "Checking trustlevel for client authrole '", session.authInfo.authrole, "'")
+            for _, value in ipairs(config.trustLevels.staticCredentials.byAuthRole) do
+                if session.authInfo.authrole == value.authrole then
+                    trustlevel = value.trustlevel
+                    wasFound = true
+                end
+            end
+
+            if wasFound then
+                return trustlevel
+            end
+        end
+
+        ngx.log(ngx.DEBUG, "Checking trustlevel for client ip '", clientIp, "'")
+        for _, value in ipairs(config.trustLevels.staticCredentials.byClientIp) do
+            if clientIp == value.clientip then
+                trustlevel = value.trustlevel
+                wasFound = true
+            end
+        end
+
+        if wasFound then
+            return trustlevel
+        end
+    else
+        -- config.trustLevels.authType == "dynamic"
+
+        local authid, authrole
+        if session.authInfo and session.authInfo.authid then
+            authid = session.authInfo.authid
+        end
+        if session.authInfo and session.authInfo.authrole then
+            authrole = session.authInfo.authrole
+        end
+
+        return config.trustLevels.authCallback(clientIp, session.realm, authid, authrole)
+    end
+
+    return config.trustLevels.defaultTrustLevel
 end
 
 ---
@@ -585,7 +645,7 @@ function _M:receiveData(regId, data)
 
                     session.isWampEstablished = 1
                     session.realm = realm
-                    session.wampFeatures = serializers.json.encode(dataObj[3])
+                    session.wampFeatures = dataObj[3]
                     store:changeSession(regId, session)
                     store:addSessionToRealm(regId, realm)
 
