@@ -30,6 +30,8 @@ local wamp_features = {
                 -- meta api are exposing if they are configured (see below)
                 --session_meta_api = true,
                 --subscription_meta_api = true
+                -- trust level feature is exposing if it is configured (see below)
+                -- publication_trustlevels = true
             }
         },
         dealer = {
@@ -42,6 +44,8 @@ local wamp_features = {
                 -- meta api are exposing if they are configured (see below)
                 --session_meta_api = true,
                 --registration_meta_api = true
+                -- trust level feature is exposing if it is configured (see below)
+                -- call_trustlevels = true
             }
         }
     }
@@ -64,6 +68,12 @@ if config.metaAPI.subscription == true then
 end
 if config.metaAPI.registration == true then
     wamp_features.roles.dealer.features.registration_meta_api = true
+end
+
+-- Add trustLevels features announcements if they are configured
+if config.trustLevels.authType ~= "none" then
+    wamp_features.roles.broker.features.publication_trustlevels = true
+    wamp_features.roles.dealer.features.call_trustlevels = true
 end
 
 local WAMP_MSG_SPEC = {
