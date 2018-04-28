@@ -263,7 +263,7 @@ local cfg = require "wiola.config"
 -- Static trustlevel configuration
 cfg.config({
     trustLevels = {
-        authType = "static",          -- none | static | dynamic
+        authType = "static",
         defaultTrustLevel = 5,
         staticCredentials = {
             byAuthid = {
@@ -284,9 +284,13 @@ cfg.config({
 -- Dynamic trustlevel configuration
 cfg.config({
     trustLevels = {
-        authType = "dynamic",          -- none | static | dynamic
+        authType = "dynamic",
         defaultTrustLevel = 5,
         authCallback = function (clientIp, realm, authid, authrole)
+        
+            -- write your own logic for setting trust level
+            -- just a simple example
+            
             if clientIp == "127.0.0.1" then
                 return 15
             end
