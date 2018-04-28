@@ -285,7 +285,6 @@ cfg.config({
 cfg.config({
     trustLevels = {
         authType = "dynamic",
-        defaultTrustLevel = 5,
         authCallback = function (clientIp, realm, authid, authrole)
         
             -- write your own logic for setting trust level
