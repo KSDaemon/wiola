@@ -7,7 +7,7 @@
 
 
 local _M = {
-    _VERSION = '0.8.0',
+    _VERSION = '0.9.0',
 }
 
 _M.__index = _M
@@ -30,6 +30,8 @@ local wamp_features = {
                 -- meta api are exposing if they are configured (see below)
                 --session_meta_api = true,
                 --subscription_meta_api = true
+                -- trust level feature is exposing if it is configured (see below)
+                -- publication_trustlevels = true
             }
         },
         dealer = {
@@ -42,6 +44,8 @@ local wamp_features = {
                 -- meta api are exposing if they are configured (see below)
                 --session_meta_api = true,
                 --registration_meta_api = true
+                -- trust level feature is exposing if it is configured (see below)
+                -- call_trustlevels = true
             }
         }
     }
@@ -64,6 +68,12 @@ if config.metaAPI.subscription == true then
 end
 if config.metaAPI.registration == true then
     wamp_features.roles.dealer.features.registration_meta_api = true
+end
+
+-- Add trustLevels features announcements if they are configured
+if config.trustLevels.authType ~= "none" then
+    wamp_features.roles.broker.features.publication_trustlevels = true
+    wamp_features.roles.dealer.features.call_trustlevels = true
 end
 
 local WAMP_MSG_SPEC = {
@@ -458,6 +468,71 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 end
 
 ---
+--- Assing trust level for request
+---
+--- @param session table WAMP session issuing request data
+---
+--- @return number Assigned trust level for request
+---
+function _M:_assignTrustLevel(session)
+    local trustlevel, wasFound
+    local clientIp = ngx.var.remote_addr
+
+    if config.trustLevels.authType == "static" then
+
+        if session.authInfo and session.authInfo.authid then
+            for _, value in ipairs(config.trustLevels.staticCredentials.byAuthid) do
+                if session.authInfo.authid == value.authid then
+                    trustlevel = value.trustlevel
+                    wasFound = true
+                end
+            end
+
+            if wasFound then
+                return trustlevel
+            end
+        end
+
+        if session.authInfo and session.authInfo.authrole then
+            for _, value in ipairs(config.trustLevels.staticCredentials.byAuthRole) do
+                if session.authInfo.authrole == value.authrole then
+                    trustlevel = value.trustlevel
+                    wasFound = true
+                end
+            end
+
+            if wasFound then
+                return trustlevel
+            end
+        end
+        for _, value in ipairs(config.trustLevels.staticCredentials.byClientIp) do
+            if clientIp == value.clientip then
+                trustlevel = value.trustlevel
+                wasFound = true
+            end
+        end
+
+        if wasFound then
+            return trustlevel
+        end
+    else
+        -- config.trustLevels.authType == "dynamic"
+
+        local authid, authrole
+        if session.authInfo and session.authInfo.authid then
+            authid = session.authInfo.authid
+        end
+        if session.authInfo and session.authInfo.authrole then
+            authrole = session.authInfo.authrole
+        end
+
+        return config.trustLevels.authCallback(clientIp, session.realm, authid, authrole)
+    end
+
+    return config.trustLevels.defaultTrustLevel
+end
+
+---
 --- Receive data from client
 ---
 --- @param regId number WAMP session registration ID
@@ -564,7 +639,7 @@ function _M:receiveData(regId, data)
 
                     session.isWampEstablished = 1
                     session.realm = realm
-                    session.wampFeatures = serializers.json.encode(dataObj[3])
+                    session.wampFeatures = dataObj[3]
                     store:changeSession(regId, session)
                     store:addSessionToRealm(regId, realm)
 
@@ -730,7 +805,15 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4], false, false) then
                 local pubId = store:getRegId()
-                local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, dataObj[3])
+
+                local options = dataObj[3]
+                if config.trustLevels.authType ~= "none" then
+                    local trustlevel = self:_assignTrustLevel(session)
+                    if trustlevel ~= nil then
+                        options.trustlevel = trustlevel
+                    end
+                end
+                local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, options)
 
                 for _, v in ipairs(recipients) do
                     self:_publishEvent(v.sessions, v.subId, pubId, v.details, dataObj[5], dataObj[6])
@@ -868,6 +951,13 @@ function _M:receiveData(regId, data)
 
                         if rpcInfo.options and rpcInfo.options.procedure then
                             details.procedure = rpcInfo.options.procedure
+                        end
+
+                        if config.trustLevels.authType ~= "none" then
+                            local trustlevel = self:_assignTrustLevel(session)
+                            if trustlevel ~= nil then
+                                details.trustlevel = trustlevel
+                            end
                         end
 
                         if dataObj[3].timeout ~= nil and

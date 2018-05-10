@@ -6,6 +6,7 @@
 
 local _M = {}
 
+local json = require('wiola.serializers.json_serializer')
 local redis
 local config
 
@@ -195,6 +196,14 @@ function _M:getSession(regId)
         local session = redis:array_to_hash(sessArr)
         session.isWampEstablished = tonumber(session.isWampEstablished)
         session.sessId = tonumber(session.sessId)
+        if session.wampFeatures then
+            session.wampFeatures = json.decode(session.wampFeatures)
+
+        end
+        if session.authInfo then
+            session.authInfo = json.decode(session.authInfo)
+        end
+
         return session
     else
         return nil
@@ -210,6 +219,10 @@ end
 function _M:changeSession(regId, session)
     session.isWampEstablished = formatNumber(session.isWampEstablished)
     session.sessId = formatNumber(session.sessId)
+    session.wampFeatures = json.encode(session.wampFeatures)
+    if session.authInfo then
+        session.authInfo = json.encode(session.authInfo)
+    end
     redis:hmset("wiSes" .. formatNumber(regId), session)
 end
 
@@ -522,6 +535,10 @@ function _M:getEventRecipients(realm, uri, regId, options)
 
     if options.disclose_me ~= nil and options.disclose_me == true then
         details.publisher = regId
+    end
+
+    if options.trustlevel ~= nil then
+        details.trustlevel = options.trustlevel
     end
 
     if type(exactSubsId) == "number" and exactSubsId > 0 then

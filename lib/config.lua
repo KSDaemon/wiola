@@ -52,6 +52,25 @@ local wiolaConf = {
         challengeCallback = nil,
         authCallback = nil
     },
+    trustLevels = {
+        authType = "none",          -- none | static | dynamic
+        defaultTrustLevel = nil,
+        staticCredentials = {
+            byAuthid = {
+                --{ authid = "user1", trustlevel = 1 },
+                --{ authid = "admin1", trustlevel = 5 }
+            },
+            byAuthRole = {
+                --{ authrole = "user-role", trustlevel = 2 },
+                --{ authrole = "admin-role", trustlevel = 4 }
+            },
+            byClientIp = {
+                --{ clientip = "127.0.0.1", trustlevel = 10 }
+            }
+        },
+        authCallback = nil -- function that accepts (client ip address, realm,
+                           -- authid, authrole) and returns trust level
+    },
     metaAPI = {
         session = false,
         subscription = false,
@@ -120,6 +139,25 @@ function _M.config(config)
 
         if config.wampCRA.authCallback ~= nil then
             wiolaConf.wampCRA.authCallback = config.wampCRA.authCallback
+        end
+    end
+
+    if config.trustLevels then
+
+        if config.trustLevels.authType ~= nil then
+            wiolaConf.trustLevels.authType = config.trustLevels.authType
+        end
+
+        if config.trustLevels.defaultTrustLevel ~= nil then
+            wiolaConf.trustLevels.defaultTrustLevel = config.trustLevels.defaultTrustLevel
+        end
+
+        if config.trustLevels.staticCredentials ~= nil then
+            wiolaConf.trustLevels.staticCredentials = config.trustLevels.staticCredentials
+        end
+
+        if config.trustLevels.authCallback ~= nil then
+            wiolaConf.trustLevels.authCallback = config.trustLevels.authCallback
         end
     end
 

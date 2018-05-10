@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-ngx.header["Server"] = "wiola/Lua v0.6.0"
+ngx.header["Server"] = "wiola/Lua v0.9.0"
 
 local has = function(tab, val)
     for _, value in ipairs (tab) do
