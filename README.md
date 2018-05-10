@@ -31,20 +31,22 @@ Wiola implements [WAMP specification][] v2 router specification on top of OpenRe
 Wiola supports next WAMP roles and features:
 
 * broker: advanced profile with features:
-    * subscriber blackwhite listing
+    * pattern based subscription
     * publisher exclusion
     * publisher identification
+    * publication trust levels
     * session meta api
+    * subscriber blackwhite listing
     * subscription meta api (partly)
-    * pattern based subscription
 * dealer: advanced profile with features:
-    * callee blackwhite listing
-    * caller exclusion
+    * call canceling
+    * call timeout
     * caller identification
-    * progressive call results
-    * session meta api
-    * registration meta api (partly)
+    * call trust levels
     * pattern based registration
+    * progressive call results
+    * registration meta api (partly)
+    * session meta api
 * Challenge Response Authentication ("WAMP-CRA")
 * Cookie Authentication
 
