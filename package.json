@@ -18,7 +18,7 @@
   "devDependencies": {
     "grunt": "^1.0.2",
     "grunt-contrib-copy": "^1.0.0",
-    "wampy": "^6.1.0",
+    "wampy": "^6.2.0",
     "wampy-cra": "^0.1.1"
   }
 }
