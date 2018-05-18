@@ -59,7 +59,7 @@ From v0.3.1 Wiola also supports lightweight POST event publishing. See processPo
 Usage example
 =============
 
-For example usage, please see [handler.lua](src/wiola/handler.lua) file.
+For example usage, please see [ws-handler.lua](src/wiola/ws-handler.lua) file.
 
 [Back to TOC](#table-of-contents)
 
@@ -171,7 +171,7 @@ http {
           # This is needed to set additional websocket protocol headers
           header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
           # Set a handler for connection
-          content_by_lua_file $document_root/lua/wiola/handler.lua;
+          content_by_lua_file $document_root/lua/wiola/ws-handler.lua;
        }
     
        # example location for a lightweight POST event publishing
