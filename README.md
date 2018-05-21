@@ -321,6 +321,8 @@ Parameters:
 
  * **config** - Configuration table with possible options:
     * **socketTimeout** - Timeout for underlying socket connection operations. Default: 100 ms
+    * **maxPayloadLen** - Maximal length of payload allowed when sending and receiving using underlying socket. 
+    Default: 65536 bytes (2^16). For raw socket transport please use values, aligned with power of two between 9 and 24. 2^9, 2^10 .. 2^24.
     * **redis** - Redis connection configuration table:
         * **host** - Redis server host or Redis unix socket path. Default: "unix:/tmp/redis.sock"
         * **port** - Redis server port (in case of use network connection). Omit for socket connection

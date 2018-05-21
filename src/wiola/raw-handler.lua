@@ -3,12 +3,28 @@
 -- User: Konstantin Burkalev
 -- Date: 16.03.14
 --
-
---ngx.var.wiola_max_payload_len = 5
-local wiola_max_payload_len = 5
+local WAMP_PAYLOAD_LENGTHS = {
+    [512] = 0,
+    [1024] = 1,
+    [2048] = 2,
+    [4096] = 3,
+    [8192] = 4,
+    [16384] = 5,
+    [32768] = 6,
+    [65536] = 7,
+    [131072] = 8,
+    [262144] = 9,
+    [524288] = 10,
+    [1048576] = 11,
+    [2097152] = 12,
+    [4194304] = 13,
+    [8388608] = 14,
+    [16777216] = 15
+}
 
 local wiola = require "wiola"
 local config = require("wiola.config").config()
+local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
 local bit = require "bit"
 local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, ok, err, bytes, dlength
 
