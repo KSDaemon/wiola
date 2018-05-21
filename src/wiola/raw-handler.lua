@@ -26,7 +26,7 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
 local bit = require "bit"
-local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, ok, err, bytes, dlength
+local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData
 
 tcpSocket, err = ngx.req.socket(true)
 
@@ -43,7 +43,7 @@ if not wampServer then
     return ngx.exit(444)
 end
 
-data, err, partial = tcpSocket:receive(4)
+data, err = tcpSocket:receive(4)
 
 if data == nil then
     ngx.log(ngx.ERR, "Failed to receive data: ", err)
@@ -56,7 +56,7 @@ if string.byte(data) ~= 0x7F then
 elseif string.byte(data, 3) ~= 0x0 or string.byte(data, 4) ~= 0x0 then
     ngx.log(ngx.ERR, "Reserved WAMP handshake bytes are not 0")
     cliData = string.char(0x7F, bit.bor(bit.lshift(3, 4), 0), 0, 0)
-    bytes, err = tcpSocket:send(cliData)
+    tcpSocket:send(cliData)
     return ngx.exit(444)
 end
 
@@ -68,9 +68,9 @@ if serializer == 1 then
 elseif serializer == 2 then
     serializerStr = "wamp.2.msgpack"
 else
-    ngx.log(ngx.ERR, "Can not recognize serializer to use (", serializerStr, ")")
+    ngx.log(ngx.ERR, "Can not recognize serializer to use (", serializer, ")")
     cliData = string.char(0x7F, bit.bor(bit.lshift(1, 4), 0), 0, 0)
-    bytes, err = tcpSocket:send(cliData)
+    tcpSocket:send(cliData)
     return ngx.exit(444)
 end
 
@@ -79,9 +79,9 @@ ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection)
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", serializerStr)
 
 cliData = string.char(0x7F, bit.bor(bit.lshift(wiola_max_payload_len, 4), serializer), 0, 0)
-bytes, err = tcpSocket:send(cliData)
+data, err = tcpSocket:send(cliData)
 
-if not bytes then
+if not data then
     ngx.log(ngx.ERR, "Failed to send handshake data: ", err)
     return ngx.exit(444)
 end
@@ -90,10 +90,10 @@ local function removeConnection(_, sessId)
 
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
-    local config = require("wiola.config").config()
+    local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    ok, err = store:init(config)
+    ok, err = store:init(wconfig)
     if not ok then
         ngx.log(ngx.DEBUG, "Can not init datastore!", err)
     else
@@ -124,16 +124,16 @@ end
 
 while true do
 --    ngx.log(ngx.DEBUG, "Started handler loop!")
-    local cliData, data, err, partial, hflags, msgType, msgLen
+    local hflags, msgType, msgLen
 
     hflags = wampServer:getHandlerFlags(sessionId)
     if hflags ~= nil then
         if hflags.sendLast == true then
             cliData = wampServer:getPendingData(sessionId, true)
 
-            bytes, err = tcpSocket:send(cliData)
+            data, err = tcpSocket:send(cliData)
 
-            if not bytes then
+            if not data then
                 ngx.log(ngx.ERR, "Failed to send data: ", err)
             end
         end
@@ -155,9 +155,9 @@ while true do
         if msgLen < cliMaxLength then
             ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
             cliData = string.char(0) .. getLenBytes(msgLen) .. cliData
-            bytes, err = tcpSocket:send(cliData)
+            data, err = tcpSocket:send(cliData)
 
-            if not bytes then
+            if not data then
                 ngx.log(ngx.ERR, "Failed to send data: ", err)
             end
         end
@@ -167,7 +167,7 @@ while true do
         cliData = wampServer:getPendingData(sessionId)
     end
 
-    data, err, partial = tcpSocket:receive(4)
+    data, err = tcpSocket:receive(4)
 
     if data == nil then
         ngx.log(ngx.ERR, "Failed to receive data: ", err)
@@ -182,7 +182,7 @@ while true do
 
     if msgType == 0 then    -- regular WAMP message
 
-        data, err, partial = tcpSocket:receive(msgLen)
+        data, err = tcpSocket:receive(msgLen)
 
         if data == nil then
             ngx.log(ngx.ERR, "Failed to receive data: ", err)
@@ -194,7 +194,7 @@ while true do
 
     elseif msgType == 1 then    -- PING
 
-        data, err, partial = tcpSocket:receive(msgLen)
+        data, err = tcpSocket:receive(msgLen)
 
         if data == nil then
             ngx.log(ngx.ERR, "Failed to receive data: ", err)
@@ -203,16 +203,16 @@ while true do
         end
 
         cliData = string.char(2) .. msgLen .. data
-        bytes, err = tcpSocket:send(cliData)
+        data, err = tcpSocket:send(cliData)
 
-        if not bytes then
+        if not data then
             ngx.log(ngx.ERR, "Failed to send data: ", err)
         end
 
-    elseif msgType == 2 then    -- PONG
+--    elseif msgType == 2 then    -- PONG
+        -- TODO Implement server initiated ping
 
     end
-
 
 --    ngx.log(ngx.DEBUG, "Finished handler loop!")
 end

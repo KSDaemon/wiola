@@ -34,10 +34,10 @@ local function removeConnection(_, sessId)
 
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
-    local config = require("wiola.config").config()
+    local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    ok, err = store:init(config)
+    ok, err = store:init(wconfig)
     if not ok then
         ngx.log(ngx.DEBUG, "Can not init datastore!", err)
     else
