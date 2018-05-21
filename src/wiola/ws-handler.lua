@@ -5,10 +5,11 @@
 --
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
+local config = require("wiola.config").config()
 local webSocket, wampServer, ok, err, bytes
 
 webSocket, err = wsServer:new({
-    timeout = tonumber(ngx.var.wiola_socket_timeout, 10) or 100,
+    timeout = config.socketTimeout,
     max_payload_len = tonumber(ngx.var.wiola_max_payload_len, 10) or 65535
 })
 

@@ -28,6 +28,7 @@ local storeConfigs = {
 
 -- Wiola Runtime configuration
 local wiolaConf = {
+    socketTimeout = 100,
     store = "redis",
     storeConfig = {
         host = "unix:///tmp/redis.sock",

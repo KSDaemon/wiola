@@ -100,6 +100,7 @@ http {
         -- Wiola configuration. You can read more in description of .configure() method below.
         local cfg = require "wiola.config"
         cfg.config({
+            socketTimeout = 100,
             store = "redis",
             storeConfig = {
                 host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path  
@@ -162,7 +163,6 @@ http {
     server {
        # example location for websocket WAMP connection
        location /ws/ {
-          set $wiola_socket_timeout 100;     # Optional parameter. Set the value to suit your needs
           set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
           
           lua_socket_log_errors off;
@@ -320,6 +320,7 @@ or are nils if not specified.
 Parameters:
 
  * **config** - Configuration table with possible options:
+    * **socketTimeout** - Timeout for underlying socket connection operations. Default: 100 ms
     * **redis** - Redis connection configuration table:
         * **host** - Redis server host or Redis unix socket path. Default: "unix:/tmp/redis.sock"
         * **port** - Redis server port (in case of use network connection). Omit for socket connection
@@ -366,6 +367,7 @@ Config example (multiple options, just for showcase):
     init_by_lua_block {
         local cfg = require "wiola.config"
         cfg.config({
+            socketTimeout = 1000,           -- one second
             callerIdentification = "always",
             redis = {
                 host = "unix:/tmp/redis.sock"   -- Optional parameter. Can be hostname/ip or socket path

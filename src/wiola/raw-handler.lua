@@ -5,9 +5,10 @@
 --
 
 --ngx.var.wiola_max_payload_len = 5
-wiola_max_payload_len = 5
+local wiola_max_payload_len = 5
 
 local wiola = require "wiola"
+local config = require("wiola.config").config()
 local bit = require "bit"
 local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, ok, err, bytes, dlength
 
@@ -17,6 +18,8 @@ if not tcpSocket then
     ngx.log(ngx.ERR, "Failed to initialize downstream socket: ", err)
     return ngx.exit(444)
 end
+
+tcpSocket:settimeout(config.socketTimeout)
 
 wampServer, err = wiola:new()
 if not wampServer then
