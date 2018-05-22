@@ -100,7 +100,9 @@ http {
         -- Wiola configuration. You can read more in description of .configure() method below.
         local cfg = require "wiola.config"
         cfg.config({
-            socketTimeout = 100,
+            socketTimeout = 1000,           -- one second
+            maxPayloadLen = 65536,
+            realms = { "app", "admin" },
             store = "redis",
             storeConfig = {
                 host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path  
@@ -323,6 +325,8 @@ Parameters:
     * **socketTimeout** - Timeout for underlying socket connection operations. Default: 100 ms
     * **maxPayloadLen** - Maximal length of payload allowed when sending and receiving using underlying socket. 
     Default: 65536 bytes (2^16). For raw socket transport please use values, aligned with power of two between 9 and 24. 2^9, 2^10 .. 2^24.
+    * **realms** - Array of allowed WAMP realms. Default value: {} - so no clients will connect to router. Also it's possible
+    to set special realm { "*" } - which allows to create any realm on client request if it not exists, great for development use.
     * **redis** - Redis connection configuration table:
         * **host** - Redis server host or Redis unix socket path. Default: "unix:/tmp/redis.sock"
         * **port** - Redis server port (in case of use network connection). Omit for socket connection
@@ -370,6 +374,8 @@ Config example (multiple options, just for showcase):
         local cfg = require "wiola.config"
         cfg.config({
             socketTimeout = 1000,           -- one second
+            maxPayloadLen = 65536,
+            realms = { "test", "app" },
             callerIdentification = "always",
             redis = {
                 host = "unix:/tmp/redis.sock"   -- Optional parameter. Can be hostname/ip or socket path

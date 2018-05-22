@@ -18,6 +18,27 @@ setmetatable(_M, {
     end
 })
 
+---
+--- Return index of obj in array t
+---
+--- @param t table array table
+--- @param obj any object to search
+--- @return index of obj or -1 if not found
+---------------------------------------------------
+local arrayIndexOf = function(t, obj)
+    if type(t) == 'table' then
+        for i = 1, #t do
+            if t[i] == obj then
+                return i
+            end
+        end
+
+        return -1
+    else
+        error("table.indexOf expects table for first argument, " .. type(t) .. " given")
+    end
+end
+
 local wamp_features = {
     agent = "wiola/Lua v" .. _M._VERSION,
     roles = {
@@ -597,7 +618,15 @@ function _M:receiveData(regId, data)
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
             local realm = dataObj[2]
-            if self:_validateURI(realm, false, false) then
+
+            if arrayIndexOf(config.realms, realm) < 0 and config.realms[1] ~= "*" then
+                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                self:_putData(session, {
+                    WAMP_MSG_SPEC.ABORT,
+                    setmetatable({}, { __jsontype = 'object' }),
+                    "wamp.error.no_such_realm"
+                })
+            elseif self:_validateURI(realm, false, false) then
 
                 if config.wampCRA.authType ~= "none" then
 
