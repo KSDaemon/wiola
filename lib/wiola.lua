@@ -7,7 +7,7 @@
 
 
 local _M = {
-    _VERSION = '0.9.0',
+    _VERSION = '0.9.1',
 }
 
 _M.__index = _M
@@ -336,9 +336,9 @@ end
 --- @param session table session object
 --- @param requestId number request Id
 --- @param rpcArgsL table Array-like payload
---- @param rpcArgsKw table Object-like payload
+-- - @ param rpcArgsKw table Object-like payload
 ---
-function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
+function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL) --, rpcArgsKw)
     local data
     local details = setmetatable({}, { __jsontype = 'object' })
 
@@ -351,7 +351,7 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
 
         elseif rpcUri == 'wamp.session.list' then
 
-            local count, sessList = store:getSessionCount(session.realm, rpcArgsL)
+            local _, sessList = store:getSessionCount(session.realm, rpcArgsL)
             data = { WAMP_MSG_SPEC.RESULT, requestId, details, sessList }
 
         elseif rpcUri == 'wamp.session.get' then
@@ -401,7 +401,13 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             if sessList ~= nil then
                 data = { WAMP_MSG_SPEC.RESULT, requestId, details, sessList }
             else
-                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_subscription" }
+                data = {
+                    WAMP_MSG_SPEC.ERROR,
+                    WAMP_MSG_SPEC.CALL,
+                    requestId,
+                    details,
+                    "wamp.error.no_such_subscription"
+                }
             end
 
         elseif rpcUri == 'wamp.subscription.count_subscribers' then
@@ -410,7 +416,13 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             if sessCount ~= nil then
                 data = { WAMP_MSG_SPEC.RESULT, requestId, details, { sessCount } }
             else
-                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_subscription" }
+                data = {
+                    WAMP_MSG_SPEC.ERROR,
+                    WAMP_MSG_SPEC.CALL,
+                    requestId,
+                    details,
+                    "wamp.error.no_such_subscription"
+                }
             end
 
         elseif rpcUri == 'wamp.registration.list' then
@@ -443,7 +455,13 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             if rpcInfo then
                 data = { WAMP_MSG_SPEC.RESULT, requestId, details, { rpcInfo.calleeSesId } }
             else
-                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_registration" }
+                data = {
+                    WAMP_MSG_SPEC.ERROR,
+                    WAMP_MSG_SPEC.CALL,
+                    requestId,
+                    details,
+                    "wamp.error.no_such_registration"
+                }
             end
 
         elseif rpcUri == 'wamp.registration.count_callees' then
@@ -454,7 +472,13 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL, rpcArgsKw)
             if rpcInfo then
                 data = { WAMP_MSG_SPEC.RESULT, requestId, details, { 1 } }
             else
-                data = { WAMP_MSG_SPEC.ERROR, WAMP_MSG_SPEC.CALL, requestId, details, "wamp.error.no_such_registration" }
+                data = {
+                    WAMP_MSG_SPEC.ERROR,
+                    WAMP_MSG_SPEC.CALL,
+                    requestId,
+                    details,
+                    "wamp.error.no_such_registration"
+                }
             end
 
         else
@@ -557,7 +581,15 @@ function _M:receiveData(regId, data)
             self:_publishMetaEvent('session', 'wamp.session.on_leave', session)
         else
             local realm = dataObj[2]
-            if self:_validateURI(realm, false, false) then
+
+            if not has(config.realms, realm) and config.realms[1] ~= "*" then
+                -- WAMP SPEC: [ABORT, Details|dict, Reason|uri]
+                self:_putData(session, {
+                    WAMP_MSG_SPEC.ABORT,
+                    setmetatable({}, { __jsontype = 'object' }),
+                    "wamp.error.no_such_realm"
+                })
+            elseif self:_validateURI(realm, false, false) then
 
                 if config.wampCRA.authType ~= "none" then
 

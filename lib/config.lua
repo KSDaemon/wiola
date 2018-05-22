@@ -28,6 +28,9 @@ local storeConfigs = {
 
 -- Wiola Runtime configuration
 local wiolaConf = {
+    socketTimeout = 100,
+    maxPayloadLen = 65536,
+    realms = {},
     store = "redis",
     storeConfig = {
         host = "unix:///tmp/redis.sock",
@@ -90,6 +93,18 @@ function _M.config(config)
 
     if not config then
         return wiolaConf
+    end
+
+    if config.socketTimeout then
+        wiolaConf.socketTimeout = config.socketTimeout
+    end
+
+    if config.maxPayloadLen then
+        wiolaConf.maxPayloadLen = config.maxPayloadLen
+    end
+
+    if config.realms then
+        wiolaConf.realms = config.realms
     end
 
     if config.store then
