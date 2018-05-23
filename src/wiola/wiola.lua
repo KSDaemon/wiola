@@ -298,7 +298,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
             argsL[1].authprovider = parameters[1].authprovider
         end
         -- TODO Add information about transport
-    elseif eventUri == 'wamp.session.on_leave' then
+    --elseif eventUri == 'wamp.session.on_leave' then
         -- nothing to add :)
     elseif eventUri == 'wamp.subscription.on_create' then
         local details = {
