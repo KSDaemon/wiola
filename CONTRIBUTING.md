@@ -47,7 +47,7 @@ If you run into an error or bug with the project:
 
 * Open an Issue at https://github.com/KSDaemon/wiola/issues
 * Include *reproduction steps* that someone else can follow to recreate the bug or error on their own.
-* Provide project and platform versions (nodejs, npm, etc), depending on what seems relevant. If not, please be ready to provide that information if maintainers ask for it.
+* Provide project and platform versions (nginx, lua, luajit, etc), depending on what seems relevant. If not, please be ready to provide that information if maintainers ask for it.
 
 Once it's filed:
 
