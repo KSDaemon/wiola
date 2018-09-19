@@ -49,6 +49,8 @@ Wiola supports next WAMP roles and features:
     * session meta api
 * Challenge Response Authentication ("WAMP-CRA")
 * Cookie Authentication
+* Rawsocket transport
+* Session Meta API
 
 Wiola supports JSON and msgpack serializers.
 
@@ -78,6 +80,7 @@ To use wiola you need:
 * [lua-resty-hmac][] (optional, required for WAMP-CRA)
 * [lua-MessagePack][] (optional)
 * [redis-lua][] (optional)
+* [stream-lua-nginx-module][] (optional)
 
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty][] server.
 
@@ -185,6 +188,27 @@ http {
        }
     
     }
+}
+```
+
+If you want to use raw socket transport instead of (or additional to) websocket, you need also to configure nginx stream
+
+```nginx
+stream {
+    # set search paths for pure Lua external libraries (';;' is the default path):
+    # add paths for wiola and msgpack libs
+    lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;';
+
+    init_by_lua_block {
+        # Actually same one as in http example above...
+    
+    }
+
+    server {
+        listen 1234;
+        content_by_lua_file $document_root/lua/wiola/raw-handler.lua;
+    }
+
 }
 ```
 
@@ -555,3 +579,4 @@ See Also
 [lua-MessagePack]: http://fperrad.github.io/lua-MessagePack/
 [lua-resty-hmac]: https://github.com/jamesmarlowe/lua-resty-hmac
 [redis-lua]: https://github.com/nrk/redis-lua
+[stream-lua-nginx-module]: https://github.com/openresty/stream-lua-nginx-module
