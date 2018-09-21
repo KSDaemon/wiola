@@ -109,6 +109,7 @@ while true do
     end
 
     data, typ = webSocket:recv_frame()
+    ngx.log(ngx.DEBUG, "Received WS Frame. Type is ", typ)
 
     if not data then
 
