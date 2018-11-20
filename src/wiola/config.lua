@@ -30,6 +30,7 @@ local storeConfigs = {
 local wiolaConf = {
     socketTimeout = 100,
     maxPayloadLen = 65536,
+    wsPingInterval = 1000,  -- interval in ms for sending websocket ping frames. set to 0 for disabling
     realms = {},
     store = "redis",
     storeConfig = {
@@ -101,6 +102,10 @@ function _M.config(config)
 
     if config.maxPayloadLen then
         wiolaConf.maxPayloadLen = config.maxPayloadLen
+    end
+
+    if config.wsPingInterval then
+        wiolaConf.wsPingInterval = config.wsPingInterval
     end
 
     if config.realms then

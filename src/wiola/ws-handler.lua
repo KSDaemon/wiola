@@ -6,7 +6,8 @@
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
-local webSocket, wampServer, ok, err, bytes
+local webSocket, wampServer, ok, err, bytes, pingCo
+local ignoreAbort = false
 
 webSocket, err = wsServer:new({
     timeout = config.socketTimeout,
@@ -30,7 +31,7 @@ local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.hea
 ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection)
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
-local function removeConnection(_, sessId)
+local function removeConnection(_, sessId, exitCode)
 
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
@@ -44,17 +45,41 @@ local function removeConnection(_, sessId)
         store:removeSession(sessId)
         ngx.log(ngx.DEBUG, "Session data successfully removed!")
     end
+
+    ngx.exit(exitCode)
 end
 
 local function removeConnectionWrapper()
+    if ignoreAbort then
+        return
+    end
     ngx.log(ngx.DEBUG, "client on_abort removeConnection callback fired!")
-    removeConnection(true, sessionId)
+    removeConnection(true, sessionId, 444)
 end
 
 ok, err = ngx.on_abort(removeConnectionWrapper)
 if not ok then
     ngx.log(ngx.ERR, "failed to register the on_abort callback: ", err)
     ngx.exit(444)
+end
+
+if config.wsPingInterval > 0 then
+    local pinger = function (period)
+        local bytes, err
+        coroutine.yield()
+
+        while true do
+            ngx.log(ngx.DEBUG, "Pinging client...")
+            bytes, err = webSocket:send_ping()
+            if not bytes then
+                ngx.log(ngx.ERR, "Failed to send ping: ", err)
+                ngx.timer.at(0, removeConnection, sessionId, 444)
+            end
+            ngx.sleep(period)
+        end
+    end
+
+    pingCo = ngx.thread.spawn(pinger, config.wsPingInterval / 1000)
 end
 
 while true do
@@ -79,8 +104,7 @@ while true do
 
         if hflags.close == true then
             ngx.log(ngx.DEBUG, "Got close connection flag for session")
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
+            ngx.timer.at(0, removeConnection, sessionId, 444)
         end
     end
 
@@ -88,7 +112,7 @@ while true do
     cliData = wampServer:getPendingData(sessionId)
 
     while cliData ~= ngx.null do
-        ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+        ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
         if dataType == 'binary' then
             bytes, err = webSocket:send_binary(cliData)
         else
@@ -104,23 +128,13 @@ while true do
 
     if webSocket.fatal then
         ngx.log(ngx.ERR, "Failed to receive frame: ", err)
-        ngx.timer.at(0, removeConnection, sessionId)
-        return ngx.exit(444)
+        ngx.timer.at(0, removeConnection, sessionId, 444)
     end
 
     data, typ = webSocket:recv_frame()
-    ngx.log(ngx.DEBUG, "Received WS Frame. Type is ", typ)
+    --ngx.log(ngx.DEBUG, "Received WS Frame. Type is ", typ)
 
-    if not data then
-
-        bytes, err = webSocket:send_ping()
-        if not bytes then
-            ngx.log(ngx.ERR, "Failed to send ping: ", err)
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
-        end
-
-    elseif typ == "close" then
+    if typ == "close" then
 
         ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
         bytes, err = webSocket:send_close(1000, "Closing connection")
@@ -128,8 +142,12 @@ while true do
                 ngx.log(ngx.ERR, "Failed to send the close frame: ", err)
                 return
             end
-        ngx.timer.at(0, removeConnection, sessionId)
         webSocket:send_close()
+        ignoreAbort = true
+        if pingCo then
+            ngx.thread.kill(pingCo)
+        end
+        ngx.timer.at(0, removeConnection, sessionId, 200)
         break
 
     elseif typ == "ping" then
@@ -137,8 +155,7 @@ while true do
         bytes, err = webSocket:send_pong()
         if not bytes then
             ngx.log(ngx.ERR, "Failed to send pong: ", err)
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
+            ngx.timer.at(0, removeConnection, sessionId, 444)
         end
 
 --    elseif typ == "pong" then
