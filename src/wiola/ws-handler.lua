@@ -77,14 +77,13 @@ if config.wsPingInterval > 0 then
 end
 
 while true do
---    ngx.log(ngx.DEBUG, "Started handler loop!")
     local cliData, data, typ, hflags
 
     --    ngx.log(ngx.DEBUG, "Checking data for client...")
     hflags = wampServer:getHandlerFlags(sessionId)
     cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
 
-    if cliData ~= ngx.null then
+    if cliData ~= ngx.null and cliData then
         ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
         if dataType == 'binary' then
             bytes, err = webSocket:send_binary(cliData)
@@ -108,7 +107,7 @@ while true do
     end
 
     if webSocket.fatal then
-        ngx.log(ngx.ERR, "Failed to receive frame: ", err)
+        --ngx.log(ngx.ERR, "Failed to receive frame: ", err)
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
     end
@@ -151,6 +150,4 @@ while true do
         wampServer:receiveData(sessionId, data)
 
     end
-
---    ngx.log(ngx.DEBUG, "Finished handler loop!")
 end
