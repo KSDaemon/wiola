@@ -354,7 +354,7 @@ function _M:getHandlerFlags(regId)
 
         return fl
     else
-        return nil
+        return {}
     end
 end
 
