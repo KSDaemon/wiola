@@ -26,7 +26,7 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
 local bit = require "bit"
-local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData
+local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData, pingCo
 
 tcpSocket, err = ngx.req.socket(true)
 
@@ -121,6 +121,29 @@ local function getLenBytes(len)
     return string.char(b1, b2, b3)
 end
 
+if config.wsPingInterval > 0 then
+    local pinger = function (period)
+        local bytes, err, pingData
+        coroutine.yield()
+
+        while true do
+            ngx.log(ngx.DEBUG, "Pinging client...")
+
+            pingData = string.char(1) .. getLenBytes(1) .. 'p'
+            bytes, err = tcpSocket:send(pingData)
+
+            if not bytes then
+                ngx.log(ngx.ERR, "Failed to send ping: ", err)
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+            ngx.sleep(period)
+        end
+    end
+
+    pingCo = ngx.thread.spawn(pinger, config.wsPingInterval / 1000)
+end
+
 while true do
     local hflags, msgType, msgLen
 
@@ -147,6 +170,9 @@ while true do
 
     if hflags.close == true then
         ngx.log(ngx.DEBUG, "Got close connection flag for session")
+        if pingCo then
+            ngx.thread.kill(pingCo)
+        end
         tcpSocket:shutdown("send")
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.OK)
