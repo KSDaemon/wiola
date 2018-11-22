@@ -6,7 +6,7 @@
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
-local webSocket, wampServer, ok, err, bytes
+local webSocket, wampServer, ok, err, bytes, pingCo
 
 webSocket, err = wsServer:new({
     timeout = config.socketTimeout,
@@ -14,12 +14,12 @@ webSocket, err = wsServer:new({
 })
 
 if not webSocket then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 wampServer, err = wiola:new()
 if not wampServer then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
@@ -42,35 +42,32 @@ end
 
 ok, err = ngx.on_abort(removeConnectionWrapper)
 if not ok then
-    ngx.exit(444)
+    ngx.exit(ngx.ERROR)
+end
+
+if config.pingInterval > 0 then
+    local pinger = function (period)
+        coroutine.yield()
+
+        while true do
+            bytes, err = webSocket:send_ping()
+            if not bytes then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+            ngx.sleep(period)
+        end
+    end
+
+    pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
 end
 
 while true do
     local cliData, data, typ, hflags
-
     hflags = wampServer:getHandlerFlags(sessionId)
-    if hflags ~= nil then
-        if hflags.sendLast == true then
-            cliData = wampServer:getPendingData(sessionId, true)
+    cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
 
-            if dataType == 'binary' then
-                bytes, err = webSocket:send_binary(cliData)
-            else
-                bytes, err = webSocket:send_text(cliData)
-            end
-
-            if not bytes then
-            end
-        end
-
-        if hflags.close == true then
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
-        end
-    end
-    cliData = wampServer:getPendingData(sessionId)
-
-    while cliData ~= ngx.null do
+    if cliData ~= ngx.null and cliData then
         if dataType == 'binary' then
             bytes, err = webSocket:send_binary(cliData)
         else
@@ -79,32 +76,31 @@ while true do
 
         if not bytes then
         end
+    end
 
-        cliData = wampServer:getPendingData(sessionId)
+    if hflags.close == true then
+        if pingCo then
+            ngx.thread.kill(pingCo)
+        end
+        webSocket:send_close(1000, "Closing connection")
+        ngx.timer.at(0, removeConnection, sessionId)
+        ngx.exit(ngx.OK)
     end
 
     if webSocket.fatal then
         ngx.timer.at(0, removeConnection, sessionId)
-        return ngx.exit(444)
+        ngx.exit(ngx.ERROR)
     end
 
     data, typ = webSocket:recv_frame()
 
-    if not data then
-
-        bytes, err = webSocket:send_ping()
-        if not bytes then
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
+    if typ == "close" then
+        if pingCo then
+            ngx.thread.kill(pingCo)
         end
-
-    elseif typ == "close" then
-        bytes, err = webSocket:send_close(1000, "Closing connection")
-            if not bytes then
-                return
-            end
+        webSocket:send_close(1000, "Closing connection")
         ngx.timer.at(0, removeConnection, sessionId)
-        webSocket:send_close()
+        ngx.exit(ngx.OK)
         break
 
     elseif typ == "ping" then
@@ -112,7 +108,7 @@ while true do
         bytes, err = webSocket:send_pong()
         if not bytes then
             ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
+            ngx.exit(ngx.ERROR)
         end
 
 --    elseif typ == "pong" then

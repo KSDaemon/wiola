@@ -26,33 +26,33 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
 local bit = require "bit"
-local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData
+local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData, pingCo
 
 tcpSocket, err = ngx.req.socket(true)
 
 if not tcpSocket then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
-tcpSocket:settimeout(config.socketTimeout)
+tcpSocket:settimeouts(config.socketTimeout, config.socketTimeout, config.socketTimeout)
 
 wampServer, err = wiola:new()
 if not wampServer then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 data, err = tcpSocket:receive(4)
 
 if data == nil then
-    return ngx.exit(444)    -- tcpSocket:close()
+    return ngx.exit(ngx.ERROR)
 end
 
 if string.byte(data) ~= 0x7F then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 elseif string.byte(data, 3) ~= 0x0 or string.byte(data, 4) ~= 0x0 then
     cliData = string.char(0x7F, bit.bor(bit.lshift(3, 4), 0), 0, 0)
     tcpSocket:send(cliData)
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 cliMaxLength = math.pow(2, 9 + bit.rshift(string.byte(data, 2), 4))
@@ -65,7 +65,7 @@ elseif serializer == 2 then
 else
     cliData = string.char(0x7F, bit.bor(bit.lshift(1, 4), 0), 0, 0)
     tcpSocket:send(cliData)
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 local sessionId, dataType = wampServer:addConnection(ngx.var.connection, serializerStr)
@@ -74,7 +74,7 @@ cliData = string.char(0x7F, bit.bor(bit.lshift(wiola_max_payload_len, 4), serial
 data, err = tcpSocket:send(cliData)
 
 if not data then
-    return ngx.exit(444)
+    return ngx.exit(ngx.ERROR)
 end
 
 local function removeConnection(_, sessId)
@@ -95,7 +95,7 @@ end
 
 ok, err = ngx.on_abort(removeConnectionWrapper)
 if not ok then
-    ngx.exit(444)
+    ngx.exit(ngx.ERROR)
 end
 
 local function getLenBytes(len)
@@ -107,28 +107,33 @@ local function getLenBytes(len)
     return string.char(b1, b2, b3)
 end
 
-while true do
-    local hflags, msgType, msgLen
+if config.pingInterval > 0 then
+    local pinger = function (period)
+        local pingData
+        coroutine.yield()
 
-    hflags = wampServer:getHandlerFlags(sessionId)
-    if hflags ~= nil then
-        if hflags.sendLast == true then
-            cliData = wampServer:getPendingData(sessionId, true)
+        while true do
 
-            data, err = tcpSocket:send(cliData)
+            pingData = string.char(1) .. getLenBytes(1) .. 'p'
+            data, err = tcpSocket:send(pingData)
 
             if not data then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
             end
-        end
-
-        if hflags.close == true then
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
+            ngx.sleep(period)
         end
     end
-    cliData = wampServer:getPendingData(sessionId)
 
-    while cliData ~= ngx.null do
+    pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
+end
+
+while true do
+    local hflags, msgType, msgLen
+    hflags = wampServer:getHandlerFlags(sessionId)
+    cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+
+    if cliData ~= ngx.null and cliData then
 
         msgLen = string.len(cliData)
 
@@ -141,50 +146,52 @@ while true do
         end
 
         -- TODO Handle exceeded message length situation
+    end
 
-        cliData = wampServer:getPendingData(sessionId)
+    if hflags.close == true then
+        if pingCo then
+            ngx.thread.kill(pingCo)
+        end
+        tcpSocket:shutdown("send")
+        ngx.timer.at(0, removeConnection, sessionId)
+        ngx.exit(ngx.OK)
     end
 
     data, err = tcpSocket:receive(4)
 
-    if data == nil then
+    if data ~= nil then
+        msgType = bit.band(string.byte(data), 0xff)
+        msgLen = bit.lshift(string.byte(data, 2), 16) +
+                bit.lshift(string.byte(data, 3), 8) +
+                string.byte(data, 4)
+
+        if msgType == 0 then    -- regular WAMP message
+
+            data, err = tcpSocket:receive(msgLen)
+
+            if data == nil then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+            wampServer:receiveData(sessionId, data)
+
+        elseif msgType == 1 then    -- PING
+
+            data, err = tcpSocket:receive(msgLen)
+
+            if data == nil then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+
+            cliData = string.char(2) .. msgLen .. data
+            data, err = tcpSocket:send(cliData)
+
+            if not data then
+            end
+        end
+    elseif err == 'closed' then
         ngx.timer.at(0, removeConnection, sessionId)
-        return ngx.exit(444)
-    end
-
-    msgType = bit.band(string.byte(data), 0xff)
-    msgLen = bit.lshift(string.byte(data, 2), 16) +
-            bit.lshift(string.byte(data, 3), 8) +
-            string.byte(data, 4)
-
-    if msgType == 0 then    -- regular WAMP message
-
-        data, err = tcpSocket:receive(msgLen)
-
-        if data == nil then
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
-        end
-
-        wampServer:receiveData(sessionId, data)
-
-    elseif msgType == 1 then    -- PING
-
-        data, err = tcpSocket:receive(msgLen)
-
-        if data == nil then
-            ngx.timer.at(0, removeConnection, sessionId)
-            return ngx.exit(444)
-        end
-
-        cliData = string.char(2) .. msgLen .. data
-        data, err = tcpSocket:send(cliData)
-
-        if not data then
-        end
-
---    elseif msgType == 2 then    -- PONG
-        -- TODO Implement server initiated ping
-
+        ngx.exit(ngx.ERROR)
     end
 end
