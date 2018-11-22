@@ -56,7 +56,7 @@ if not ok then
     ngx.exit(ngx.ERROR)
 end
 
-if config.wsPingInterval > 0 then
+if config.pingInterval > 0 then
     local pinger = function (period)
         local bytes, err
         coroutine.yield()
@@ -73,7 +73,7 @@ if config.wsPingInterval > 0 then
         end
     end
 
-    pingCo = ngx.thread.spawn(pinger, config.wsPingInterval / 1000)
+    pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
 end
 
 while true do
