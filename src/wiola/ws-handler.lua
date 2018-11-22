@@ -58,7 +58,6 @@ end
 
 if config.pingInterval > 0 then
     local pinger = function (period)
-        local bytes, err
         coroutine.yield()
 
         while true do

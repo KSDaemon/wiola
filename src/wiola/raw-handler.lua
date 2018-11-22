@@ -123,16 +123,16 @@ end
 
 if config.pingInterval > 0 then
     local pinger = function (period)
-        local bytes, err, pingData
+        local pingData
         coroutine.yield()
 
         while true do
             ngx.log(ngx.DEBUG, "Pinging client...")
 
             pingData = string.char(1) .. getLenBytes(1) .. 'p'
-            bytes, err = tcpSocket:send(pingData)
+            data, err = tcpSocket:send(pingData)
 
-            if not bytes then
+            if not data then
                 ngx.log(ngx.ERR, "Failed to send ping: ", err)
                 ngx.timer.at(0, removeConnection, sessionId)
                 ngx.exit(ngx.ERROR)
