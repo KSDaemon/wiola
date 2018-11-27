@@ -165,10 +165,6 @@ end
 function _M:getRegId()
     local regId
     local max = 2 ^ 53
-    local time = redis:time()
-
-    --    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
-    math.randomseed(time[1] * 1000000 + time[2])
 
     repeat
         regId = math.random(max)
@@ -181,13 +177,16 @@ end
 ---
 --- Add new session Id to active list
 ---
---- @param regId number session registration Id
 --- @param session table Session information
+--- @return regId number session registration Id
 ---
-function _M:addSession(regId, session)
-    session.sessId = formatNumber(session.sessId)
-    redis:sadd("wiolaIds", formatNumber(regId))
-    redis:hmset("wiSes" .. formatNumber(regId), session)
+function _M:addSession(session)
+    local regId = self:getRegId()
+    local regIdStr = formatNumber(regId)
+    session.sessId = regIdStr
+    redis:sadd("wiolaIds", regIdStr)
+    redis:hmset("wiSes" .. regIdStr, session)
+    return regId
 end
 
 ---

@@ -192,8 +192,7 @@ end
 --- @return number, string WAMP session registration ID, connection data type
 ---
 function _M:addConnection(sid, wampProto)
-    local regId = store:getRegId()
-    local dataType
+    local regId, dataType
 
     if wampProto == nil or wampProto == "" then
         wampProto = 'wamp.2.json' -- Setting default protocol for encoding/decodig use
@@ -205,9 +204,9 @@ function _M:addConnection(sid, wampProto)
         dataType = 'text'
     end
 
-    store:addSession(regId, {
+    regId = store:addSession({
         connId = sid,
-        sessId = regId,
+        sessId = 0,
         isWampEstablished = 0,
         --        realm = nil,
         --        wamp_features = nil,
