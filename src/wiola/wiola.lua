@@ -283,7 +283,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
         return
     end
 
-    local pubId = store:getRegId()
+    local pubId = store:getRegId('Publications')
     local recipients = store:getTopicSessions(session.realm, eventUri)
     local parameters = {n = select('#', ...), ...}
     local argsL, argsKW = { session.sessId }, nil
@@ -851,7 +851,7 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4], false, false) then
-                local pubId = store:getRegId()
+                local pubId = store:getRegId('Publications')
 
                 local options = dataObj[3]
                 if config.trustLevels.authType ~= "none" then
@@ -995,7 +995,7 @@ function _M:receiveData(regId, data)
                         end
 
                         local calleeSess = store:getSession(rpcInfo.calleeSesId)
-                        local invReqId = store:getRegId()
+                        local invReqId = store:getRegId('Invocations')
 
                         if rpcInfo.options and rpcInfo.options.procedure then
                             details.procedure = rpcInfo.options.procedure

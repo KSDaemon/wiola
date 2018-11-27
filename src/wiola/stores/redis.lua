@@ -160,19 +160,35 @@ end
 ---
 --- Generate unique Id
 ---
+--- @param scope string scope to operate in
 --- @return number unique Id
 ---
-function _M:getRegId()
+function _M:getRegId(scope)
     local regId
     local max = 2 ^ 53
+    local ns = "wiola" .. scope .. "Ids"
 
     repeat
         regId = math.random(max)
     --        regId = math.random(100000000000000)
-    until redis:sismember("wiolaIds", formatNumber(regId))
+    until redis:sismember(ns, formatNumber(regId))
+    redis:sadd(ns, formatNumber(regId))
 
     return regId
 end
+
+---
+--- Remove used Id
+---
+--- @param scope string scope to operate in
+--- @param regIdStr string registered Id to remove
+--- @return number count of items removed
+---
+function _M:removeRegId(scope, regIdStr)
+    local ns = "wiola" .. scope .. "Ids"
+    redis:srem(ns,regIdStr)
+end
+
 
 ---
 --- Add new session Id to active list
@@ -181,10 +197,9 @@ end
 --- @return regId number session registration Id
 ---
 function _M:addSession(session)
-    local regId = self:getRegId()
+    local regId = self:getRegId('Sessions')
     local regIdStr = formatNumber(regId)
     session.sessId = regIdStr
-    redis:sadd("wiolaIds", regIdStr)
     redis:hmset("wiSes" .. regIdStr, session)
     return regId
 end
@@ -245,22 +260,14 @@ function _M:removeSession(regId)
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. session.realm .. "Subs"))
 
     for k, v in pairs(subscriptions) do
-        redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regIdStr)
-        redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Session" .. regIdStr)
-        if redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
-            redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
-            redis:hdel("wiRealm" .. session.realm .. "Subs",k)
-            redis:hdel("wiRealm" .. session.realm .. "RevSubs",v)
-        end
+        self:unsubscribeSession(session.realm, v, regId)
     end
 
     local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
-    for k, _ in pairs(rpcs) do
-        redis:srem("wiRealm" .. session.realm .. "RPCs",k)
-        redis:del("wiRealm" .. session.realm .. "RPC" .. k)
+    for k, v in pairs(rpcs) do
+        self:unregisterSessionRPC(session.realm, v, regId)
     end
-
     redis:del("wiSes" .. regIdStr .. "RPCs")
     redis:del("wiSes" .. regIdStr .. "RevRPCs")
     redis:del("wiSes" .. regIdStr .. "Challenge")
@@ -272,7 +279,7 @@ function _M:removeSession(regId)
 
     redis:del("wiSes" .. regIdStr .. "Data")
     redis:del("wiSes" .. regIdStr)
-    redis:srem("wiolaIds",regIdStr)
+    self:removeRegId('Sessions', regIdStr)
 end
 
 ---
@@ -433,7 +440,7 @@ function _M:subscribeSession(realm, uri, options, regId)
     local regIdStr = formatNumber(regId)
 
     if not subscriptionId then
-        subscriptionId = self:getRegId()
+        subscriptionId = self:getRegId('Subscriptions')
         isNewSubscription = true
         subscriptionIdStr = formatNumber(subscriptionId)
         redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
@@ -472,6 +479,7 @@ function _M:unsubscribeSession(realm, subscId, regId)
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
         redis:hdel("wiRealm" .. realm .. "RevSubs", subscIdStr)
         redis:del("wiRealm" .. realm .. "Sub" .. subscr)
+        self:removeRegId('Subscriptions', subscIdStr)
         wasTopicRemoved = true
     end
 
@@ -793,7 +801,7 @@ function _M:registerSessionRPC(realm, uri, options, regId)
     local regIdStr = formatNumber(regId)
 
     if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
-        registrationId = self:getRegId()
+        registrationId = self:getRegId('Registrations')
         registrationIdStr = formatNumber(registrationId)
 
         redis:sadd("wiRealm" .. realm .. "RPCs", uri)
@@ -851,7 +859,7 @@ function _M:registerMetaRpc(realm)
     for _, uri in ipairs(uris) do
 
         if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
-            registrationId = self:getRegId()
+            registrationId = self:getRegId('Registrations')
             registrationIdStr = formatNumber(registrationId)
 
             redis:sadd("wiRealm" .. realm .. "RPCs", uri)
@@ -881,6 +889,7 @@ function _M:unregisterSessionRPC(realm, registrationId, regId)
         redis:hdel("wiSes" .. regIdStr .. "RevRPCs", registrationIdStr)
         redis:del("wiRealm" .. realm .. "RPC" .. rpc)
         redis:srem("wiRealm" .. realm .. "RPCs", rpc)
+        self:removeRegId('Registrations', registrationIdStr)
     end
 
     return rpc
