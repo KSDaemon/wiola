@@ -98,6 +98,21 @@ http {
     # add paths for wiola and msgpack libs
     lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;';
 
+    init_worker_by_lua_block {
+        -- Initializing math.randomseed for every worker/luaVM
+        local f = io.open('/dev/random', 'rb')
+        local seed
+        if f then
+            local b1, b2, b3, b4 = string.byte(f:read(4), 1, 4)
+            seed = b1 * 0xFFFFFF + b2 * 0xFFFF + b3 * 0xFF + b4
+            f:close()
+        else
+            seed = (ngx.var.msec * ((65536 * ngx.worker.pid()) % 1000)) % 4294967295
+        end
+
+        math.randomseed(seed)
+    }
+
     init_by_lua_block {
 
         -- Wiola configuration. You can read more in description of .configure() method below.
@@ -199,9 +214,12 @@ stream {
     # add paths for wiola and msgpack libs
     lua_package_path '/usr/local/lualib/wiola/?.lua;/usr/local/lualib/lua-MessagePack/?.lua;;';
 
+    init_worker_by_lua_block {
+        # Actually same one as in http example above...
+    }
+
     init_by_lua_block {
         # Actually same one as in http example above...
-    
     }
 
     server {
@@ -349,6 +367,7 @@ Parameters:
     * **socketTimeout** - Timeout for underlying socket connection operations. Default: 100 ms
     * **maxPayloadLen** - Maximal length of payload allowed when sending and receiving using underlying socket. 
     Default: 65536 bytes (2^16). For raw socket transport please use values, aligned with power of two between 9 and 24. 2^9, 2^10 .. 2^24.
+    * **pingInterval** - Interval in ms for sending ping frames. Set to 0 for disabling server initiated ping. Default: 1000 ms
     * **realms** - Array of allowed WAMP realms. Default value: {} - so no clients will connect to router. Also it's possible
     to set special realm { "*" } - which allows to create any realm on client request if it not exists, great for development use.
     * **redis** - Redis connection configuration table:
