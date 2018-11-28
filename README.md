@@ -107,14 +107,14 @@ http {
             seed = b1 * 0x1000000 + b2 * 0x10000 + b3 * 0x100 + b4
             f:close()
         else
-            seed = (ngx.var.msec * ((0xFFFF * ngx.worker.pid()) % 1000)) % 0xFFFFFFFF
+            seed = ngx.time() + ngx.worker.pid()
         end
-
         math.randomseed(seed)
+        math.randomseed = function()end
     }
 
-    init_by_lua_block {
 
+    init_by_lua_block {
         -- Wiola configuration. You can read more in description of .configure() method below.
         local cfg = require "wiola.config"
         cfg.config({

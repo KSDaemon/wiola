@@ -143,7 +143,6 @@ end
 ---
 function _M:_randomString(length)
     local str = {};
-    math.randomseed(math.floor(ngx.now()*1000))
 
     for _ = 1, length do
         table.insert(str, string.char(math.random(32, 126)))

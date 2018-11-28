@@ -171,9 +171,10 @@ function _M:getRegId(scope)
     repeat
         regId = math.random(max)
     --        regId = math.random(100000000000000)
-    until redis:sismember(ns, formatNumber(regId))
+    until redis:sismember(ns, formatNumber(regId)) == 0
     redis:sadd(ns, formatNumber(regId))
 
+    ngx.log(ngx.DEBUG, "Generated unique Id in scope ", scope, ": ", regId)
     return regId
 end
 
