@@ -259,13 +259,13 @@ function _M:removeSession(regId)
 
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. session.realm .. "Subs"))
 
-    for k, v in pairs(subscriptions) do
+    for _, v in pairs(subscriptions) do
         self:unsubscribeSession(session.realm, v, regId)
     end
 
     local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
-    for k, v in pairs(rpcs) do
+    for _, v in pairs(rpcs) do
         self:unregisterSessionRPC(session.realm, v, regId)
     end
     redis:del("wiSes" .. regIdStr .. "RPCs")

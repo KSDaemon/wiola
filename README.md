@@ -104,10 +104,10 @@ http {
         local seed
         if f then
             local b1, b2, b3, b4 = string.byte(f:read(4), 1, 4)
-            seed = b1 * 0xFFFFFF + b2 * 0xFFFF + b3 * 0xFF + b4
+            seed = b1 * 0x1000000 + b2 * 0x10000 + b3 * 0x100 + b4
             f:close()
         else
-            seed = (ngx.var.msec * ((65536 * ngx.worker.pid()) % 1000)) % 4294967295
+            seed = (ngx.var.msec * ((0xFFFF * ngx.worker.pid()) % 1000)) % 0xFFFFFFFF
         end
 
         math.randomseed(seed)
