@@ -226,7 +226,7 @@ end
 function _M:_putData(session, data)
     local dataObj = serializers[session.encoding].encode(data)
 
-    ngx.log(ngx.DEBUG, "Preparing data for client: ", dataObj)
+    ngx.log(ngx.DEBUG, "Preparing data for client ", session.sessId, ": ", dataObj)
     store:putData(session, dataObj)
     ngx.log(ngx.DEBUG, "Pushed data for client into store")
 end
