@@ -3,10 +3,12 @@
 -- User: Konstantin Burkalev
 -- Date: 16.03.14
 --
+
+local getdump = require("debug.vardump").getdump
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
-local webSocket, wampServer, ok, err, bytes, pingCo
+local webSocket, wampServer, ok, err, bytes, pingCo, notifierCo
 
 webSocket, err = wsServer:new({
     timeout = config.socketTimeout,
@@ -58,13 +60,14 @@ end
 
 if config.pingInterval > 0 then
     local pinger = function (period)
+        local lbytes, lerr
         coroutine.yield()
 
         while true do
             ngx.log(ngx.DEBUG, "Pinging client...")
-            bytes, err = webSocket:send_ping()
-            if not bytes then
-                ngx.log(ngx.ERR, "Failed to send ping: ", err)
+            lbytes, lerr = webSocket:send_ping()
+            if not lbytes then
+                ngx.log(ngx.ERR, "Failed to send ping: ", lerr)
                 ngx.timer.at(0, removeConnection, sessionId)
                 ngx.exit(ngx.ERROR)
             end
@@ -75,35 +78,93 @@ if config.pingInterval > 0 then
     pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
 end
 
-while true do
-    local cliData, data, typ, hflags
+local redNotifier = function ()
+    local redisOk, redis, lbytes, lres, lerr, cliData, hflags
 
-    --    ngx.log(ngx.DEBUG, "Checking data for client...")
-    hflags = wampServer:getHandlerFlags(sessionId)
-    cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+    local redisLib = require "resty.redis"
+    redis = redisLib:new()
+    redis:set_timeout(0)
 
-    if cliData ~= ngx.null and cliData then
-        ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
-        if dataType == 'binary' then
-            bytes, err = webSocket:send_binary(cliData)
-        else
-            bytes, err = webSocket:send_text(cliData)
-        end
-
-        if not bytes then
-            ngx.log(ngx.ERR, "Failed to send data: ", err)
-        end
+    if config.storeConfig.port == nil then
+        redisOk, lerr = redis:connect(config.storeConfig.host)
+    else
+        redisOk, lerr = redis:connect(config.storeConfig.host, config.storeConfig.port)
     end
 
-    if hflags.close == true then
-        ngx.log(ngx.DEBUG, "Got close connection flag for session")
-        if pingCo then
-            ngx.thread.kill(pingCo)
-        end
-        webSocket:send_close(1000, "Closing connection")
+    if redisOk and config.storeConfig.db ~= nil then
+        redis:select(config.storeConfig.db)
+    end
+
+    if not redisOk then
+        ngx.log(ngx.ERR, "Failed to read initialize redis connection: ", lerr)
         ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.OK)
+        ngx.exit(ngx.ERROR)
     end
+
+    local sesskey = "__keyspace@" .. (config.storeConfig.db or 0) .. "__:wiSes" .. string.format("%.0f", sessionId) .. "Data"
+    ngx.log(ngx.DEBUG, "Subscribing to redis notification for key: ", sesskey)
+    lres, lerr = redis:subscribe(sesskey)
+    if not lres then
+        ngx.log(ngx.ERR, "Failed to subscribe to redis topic: ", lerr)
+        ngx.timer.at(0, removeConnection, sessionId)
+        ngx.exit(ngx.ERROR)
+    end
+
+    coroutine.yield()
+
+    while true do
+        lres, lerr = redis:read_reply()
+        if not lres then
+            ngx.log(ngx.ERR, "Failed to read redis reply: ", lerr)
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.ERROR)
+        end
+
+        ngx.log(ngx.DEBUG, "Received redis notification!", getdump(lres))
+        if lres[1] == "message" and lres[3] == "rpush" then
+            ngx.log(ngx.DEBUG, "Received rpush redis notification!")
+
+            hflags = wampServer:getHandlerFlags(sessionId)
+            cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+            --if hflags.sendLast == true then
+            --    cliData = redis:rpop("wiSes" .. string.format("%.0f", sessionId) .. "Data")
+            --else
+            --    cliData = redis:lpop("wiSes" .. string.format("%.0f", sessionId) .. "Data")
+            --end
+            --ngx.log(ngx.DEBUG, "cliData: ", cliData)
+
+
+            if cliData ~= ngx.null and cliData then
+                ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
+                if dataType == 'binary' then
+                    lbytes, lerr = webSocket:send_binary(cliData)
+                else
+                    lbytes, lerr = webSocket:send_text(cliData)
+                end
+
+                if not lbytes then
+                    ngx.log(ngx.ERR, "Failed to send data: ", lerr)
+                end
+            end
+
+            if hflags.close == true then
+                ngx.log(ngx.DEBUG, "Got close connection flag for session")
+                if pingCo then
+                    ngx.thread.kill(pingCo)
+                end
+                webSocket:send_close(1000, "Closing connection")
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.OK)
+            end
+        end
+        ngx.sleep(1)
+    end
+end
+
+notifierCo = ngx.thread.spawn(redNotifier)
+
+while true do
+    local data, typ
 
     if webSocket.fatal then
         --ngx.log(ngx.ERR, "Failed to receive frame: ", err)
