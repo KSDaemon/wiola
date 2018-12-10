@@ -8,7 +8,11 @@ local getdump = require("debug.vardump").getdump
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
-local webSocket, wampServer, ok, err, bytes, pingCo, notifierCo
+local semaphore = require "ngx.semaphore"
+local sema = semaphore.new()
+local wampServer, webSocket, ok, err, pingCo, notifierCo, socketCo
+local socketData = {}
+local storeDataCount = 0
 
 webSocket, err = wsServer:new({
     timeout = config.socketTimeout,
@@ -60,13 +64,13 @@ end
 
 if config.pingInterval > 0 then
     local pinger = function (period)
-        local lbytes, lerr
+        local bytes, lerr
         coroutine.yield()
 
         while true do
             ngx.log(ngx.DEBUG, "Pinging client...")
-            lbytes, lerr = webSocket:send_ping()
-            if not lbytes then
+            bytes, lerr = webSocket:send_ping()
+            if not bytes then
                 ngx.log(ngx.ERR, "Failed to send ping: ", lerr)
                 ngx.timer.at(0, removeConnection, sessionId)
                 ngx.exit(ngx.ERROR)
@@ -79,9 +83,9 @@ if config.pingInterval > 0 then
 end
 
 local redNotifier = function ()
-    local redisOk, redis, lbytes, lres, lerr, cliData, hflags
-
+    local redisOk, redis, lres, lerr
     local redisLib = require "resty.redis"
+
     redis = redisLib:new()
     redis:set_timeout(0)
 
@@ -123,27 +127,93 @@ local redNotifier = function ()
         ngx.log(ngx.DEBUG, "Received redis notification!", getdump(lres))
         if lres[1] == "message" and lres[3] == "rpush" then
             ngx.log(ngx.DEBUG, "Received rpush redis notification!")
+            storeDataCount = storeDataCount + 1
+            sema:post(1)
+        end
+    end
+end
 
+notifierCo = ngx.thread.spawn(redNotifier)
+
+local SocketHandler = function ()
+    local bytes, lerr
+
+    while true do
+        local data, typ
+
+        if webSocket.fatal then
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.ERROR)
+        end
+
+        data, typ = webSocket:recv_frame()
+        --ngx.log(ngx.DEBUG, "Received WS Frame. Type is ", typ)
+
+        if typ == "close" then
+
+            ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
+            if pingCo then
+                ngx.thread.kill(pingCo)
+            end
+            webSocket:send_close(1000, "Closing connection")
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.OK)
+            break
+
+        elseif typ == "ping" then
+
+            bytes, lerr = webSocket:send_pong()
+            if not bytes then
+                ngx.log(ngx.ERR, "Failed to send pong: ", lerr)
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+
+    --    elseif typ == "pong" then
+
+    --        ngx.log(ngx.DEBUG, "client ponged")
+
+        elseif typ == "text" then -- Received something texty
+
+            ngx.log(ngx.DEBUG, "Received text data: ", data)
+            table.insert(socketData, data)
+            sema:post(1)
+
+        elseif typ == "binary" then -- Received something binary
+
+            ngx.log(ngx.DEBUG, "Received binary data")
+            table.insert(socketData, data)
+            sema:post(1)
+        end
+    end
+
+end
+
+socketCo = ngx.thread.spawn(SocketHandler)
+
+while true do
+    local ok, err = sema:wait(60)  -- wait for a second at most
+    if not ok then
+        ngx.log(ngx.DEBUG, "main thread: failed to wait on sema: ", err)
+    else
+        local hflags, cliData, bytes, err
+
+        ngx.log(ngx.DEBUG, "main thread: waited successfully.")
+
+        while storeDataCount > 0 do
             hflags = wampServer:getHandlerFlags(sessionId)
             cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
-            --if hflags.sendLast == true then
-            --    cliData = redis:rpop("wiSes" .. string.format("%.0f", sessionId) .. "Data")
-            --else
-            --    cliData = redis:lpop("wiSes" .. string.format("%.0f", sessionId) .. "Data")
-            --end
-            --ngx.log(ngx.DEBUG, "cliData: ", cliData)
-
 
             if cliData ~= ngx.null and cliData then
                 ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
                 if dataType == 'binary' then
-                    lbytes, lerr = webSocket:send_binary(cliData)
+                    bytes, err = webSocket:send_binary(cliData)
                 else
-                    lbytes, lerr = webSocket:send_text(cliData)
+                    bytes, err = webSocket:send_text(cliData)
                 end
 
-                if not lbytes then
-                    ngx.log(ngx.ERR, "Failed to send data: ", lerr)
+                if not bytes then
+                    ngx.log(ngx.ERR, "Failed to send data: ", err)
                 end
             end
 
@@ -156,58 +226,12 @@ local redNotifier = function ()
                 ngx.timer.at(0, removeConnection, sessionId)
                 ngx.exit(ngx.OK)
             end
-        end
-        ngx.sleep(1)
-    end
-end
 
-notifierCo = ngx.thread.spawn(redNotifier)
-
-while true do
-    local data, typ
-
-    if webSocket.fatal then
-        --ngx.log(ngx.ERR, "Failed to receive frame: ", err)
-        ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.ERROR)
-    end
-
-    data, typ = webSocket:recv_frame()
-    --ngx.log(ngx.DEBUG, "Received WS Frame. Type is ", typ)
-
-    if typ == "close" then
-
-        ngx.log(ngx.DEBUG, "Normal closing websocket. SID: ", ngx.var.connection)
-        if pingCo then
-            ngx.thread.kill(pingCo)
-        end
-        webSocket:send_close(1000, "Closing connection")
-        ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.OK)
-        break
-
-    elseif typ == "ping" then
-
-        bytes, err = webSocket:send_pong()
-        if not bytes then
-            ngx.log(ngx.ERR, "Failed to send pong: ", err)
-            ngx.timer.at(0, removeConnection, sessionId)
-            ngx.exit(ngx.ERROR)
+            storeDataCount = storeDataCount - 1
         end
 
---    elseif typ == "pong" then
-
---        ngx.log(ngx.DEBUG, "client ponged")
-
-    elseif typ == "text" then -- Received something texty
-
-        ngx.log(ngx.DEBUG, "Received text data: ", data)
-        wampServer:receiveData(sessionId, data)
-
-    elseif typ == "binary" then -- Received something binary
-
-        ngx.log(ngx.DEBUG, "Received binary data")
-        wampServer:receiveData(sessionId, data)
-
+        while #socketData > 0 do
+            wampServer:receiveData(sessionId, table.remove(socketData, 1))
+        end
     end
 end
