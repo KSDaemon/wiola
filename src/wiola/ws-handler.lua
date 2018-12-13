@@ -4,13 +4,13 @@
 -- Date: 16.03.14
 --
 
-local getdump = require("debug.vardump").getdump
+--local getdump = require("debug.vardump").getdump
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
 local semaphore = require "ngx.semaphore"
 local sema = semaphore.new()
-local wampServer, webSocket, ok, err, pingCo, notifierCo, socketCo
+local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
 local storeDataCount = 0
 
@@ -37,6 +37,7 @@ ngx.log(ngx.DEBUG, "New websocket client from ", ngx.var.remote_addr, ". Conn Id
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
 local function removeConnection(_, sessId)
+    local ok, err
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local wconfig = require("wiola.config").config()
@@ -105,7 +106,11 @@ local redNotifier = function ()
         ngx.exit(ngx.ERROR)
     end
 
-    local sesskey = "__keyspace@" .. (config.storeConfig.db or 0) .. "__:wiSes" .. string.format("%.0f", sessionId) .. "Data"
+    local sesskey = "__keyspace@" ..
+            (config.storeConfig.db or 0) ..
+            "__:wiSes" ..
+            string.format("%.0f", sessionId) ..
+            "Data"
     ngx.log(ngx.DEBUG, "Subscribing to redis notification for key: ", sesskey)
     lres, lerr = redis:subscribe(sesskey)
     if not lres then
@@ -124,7 +129,7 @@ local redNotifier = function ()
             ngx.exit(ngx.ERROR)
         end
 
-        ngx.log(ngx.DEBUG, "Received redis notification!", getdump(lres))
+        ngx.log(ngx.DEBUG, "Received redis notification!")
         if lres[1] == "message" and lres[3] == "rpush" then
             ngx.log(ngx.DEBUG, "Received rpush redis notification!")
             storeDataCount = storeDataCount + 1
@@ -133,13 +138,11 @@ local redNotifier = function ()
     end
 end
 
-notifierCo = ngx.thread.spawn(redNotifier)
+ngx.thread.spawn(redNotifier)
 
 local SocketHandler = function ()
-    local bytes, lerr
-
     while true do
-        local data, typ
+        local data, typ, bytes, lerr
 
         if webSocket.fatal then
             ngx.timer.at(0, removeConnection, sessionId)
@@ -186,17 +189,16 @@ local SocketHandler = function ()
             sema:post(1)
         end
     end
-
 end
 
-socketCo = ngx.thread.spawn(SocketHandler)
+ngx.thread.spawn(SocketHandler)
 
 while true do
     local ok, err = sema:wait(60)  -- wait for a second at most
     if not ok then
         ngx.log(ngx.DEBUG, "main thread: failed to wait on sema: ", err)
     else
-        local hflags, cliData, bytes, err
+        local hflags, cliData, bytes
 
         ngx.log(ngx.DEBUG, "main thread: waited successfully.")
 
