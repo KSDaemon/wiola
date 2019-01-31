@@ -1,9 +1,9 @@
 package = "Wiola"
-version = "0.11.0-1"
+version = "0.12.0-1"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
-    tag = "v0.11.0"
+    tag = "v0.12.0"
 }
 
 description = {
