@@ -10,6 +10,7 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local semaphore = require "ngx.semaphore"
 local sema = semaphore.new()
+local mime = require("mime")
 local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
 local storeDataCount = 0
@@ -207,10 +208,11 @@ while true do
             cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
 
             if cliData ~= ngx.null and cliData then
-                ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
                 if dataType == 'binary' then
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", mime.qp(cliData), ". Sending...")
                     bytes, err = webSocket:send_binary(cliData)
                 else
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
                     bytes, err = webSocket:send_text(cliData)
                 end
 
