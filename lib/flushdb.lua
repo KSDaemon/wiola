@@ -13,10 +13,10 @@ function _M.flushAll()
 
     local conf = require("wiola.config").config()
     local redis = require "redis"
-    local client = redis.connect(conf.redis.host, conf.redis.port)
+    local client = redis.connect(conf.storeConfig.host, conf.storeConfig.port)
 
-    if conf.redis.db then
-        client:select(conf.redis.db)
+    if conf.storeConfig.db then
+        client:select(conf.storeConfig.db)
     end
 
     client:flushdb()
