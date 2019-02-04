@@ -252,11 +252,13 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
 
     local data
     if not args and not argsKW then
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }) }
     elseif args and not argsKW then
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }),
+            setmetatable(args, { __jsontype = 'array' }) }
     else
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }),
+            setmetatable(args, { __jsontype = 'array' }), argsKW }
     end
 
     for _, v in ipairs(sessRegIds) do
@@ -286,6 +288,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
     local recipients = store:getTopicSessions(session.realm, eventUri)
     local parameters = {n = select('#', ...), ...}
     local argsL, argsKW = { session.sessId }, nil
+    local details = {}
 
     if eventUri == 'wamp.session.on_join' then
         argsL = {{ session = session.sessId }}
@@ -329,7 +332,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
         table.insert(argsL, parameters[1])
     end
 
-    self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
+    self:_publishEvent(recipients, subId, pubId, details, argsL, argsKW)
 end
 
 ---
@@ -809,7 +812,7 @@ function _M:receiveData(regId, data)
                         invoc.CallReqId,
                         setmetatable({}, { __jsontype = 'object' }),
                         dataObj[5],
-                        dataObj[6]
+                        setmetatable(dataObj[6], { __jsontype = 'array' })
                     })
                 elseif #dataObj == 7 then
                     -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri,
@@ -820,7 +823,7 @@ function _M:receiveData(regId, data)
                         invoc.CallReqId,
                         setmetatable({}, { __jsontype = 'object' }),
                         dataObj[5],
-                        dataObj[6],
+                        setmetatable(dataObj[6], { __jsontype = 'array' }),
                         dataObj[7]
                     })
                 else
@@ -1040,7 +1043,7 @@ function _M:receiveData(regId, data)
                                 invReqId,
                                 rpcInfo.registrationId,
                                 details,
-                                dataObj[5]
+                                setmetatable(dataObj[5], { __jsontype = 'array' })
                             })
                         elseif #dataObj == 6 then
                             -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
@@ -1050,7 +1053,7 @@ function _M:receiveData(regId, data)
                                 invReqId,
                                 rpcInfo.registrationId,
                                 details,
-                                dataObj[5],
+                                setmetatable(dataObj[5], { __jsontype = 'array' }),
                                 dataObj[6]
                             })
                         else
@@ -1178,10 +1181,12 @@ function _M:receiveData(regId, data)
 
             if #dataObj == 4 then
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, setmetatable(dataObj[4], { __jsontype = 'array' }) })
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details,
+                    setmetatable(dataObj[4], { __jsontype = 'array' }) })
             elseif #dataObj == 5 then
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, setmetatable(dataObj[4], { __jsontype = 'array' }), dataObj[5] })
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details,
+                    setmetatable(dataObj[4], { __jsontype = 'array' }), dataObj[5] })
             else
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
                 self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
