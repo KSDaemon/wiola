@@ -1178,10 +1178,10 @@ function _M:receiveData(regId, data)
 
             if #dataObj == 4 then
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4] })
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, setmetatable(dataObj[4], { __jsontype = 'array' }) })
             elseif #dataObj == 5 then
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4], dataObj[5] })
+                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, setmetatable(dataObj[4], { __jsontype = 'array' }), dataObj[5] })
             else
                 -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
                 self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
