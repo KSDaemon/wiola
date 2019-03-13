@@ -593,6 +593,9 @@ See Also
 
 [Back to TOC](#table-of-contents)
 
+Thanks JetBrains for support! Best IDEs for every language!
+
+[![JetBrains](https://user-images.githubusercontent.com/458096/54276284-086cad00-459e-11e9-9684-47536d9520c4.png)](https://www.jetbrains.com/?from=wampy.js)
 
 [WAMP specification]: http://wamp-proto.org/
 [Challenge Response Authentication section in WAMP Specification]: https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3
