@@ -934,7 +934,7 @@ function _M:getInvocation(invocReqId)
 
     local invocArr = redis:hgetall("wiInvoc" .. formatNumber(invocReqId))
 
-    if invocArr ~= ngx.null then
+    if type(invocArr) ~= nil then
         local invoc = redis:array_to_hash(invocArr)
         invoc.CallReqId = tonumber(invoc.CallReqId)
         invoc.CallReqId = tonumber(invoc.CallReqId)

@@ -1175,10 +1175,10 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
 
             local invoc = store:getInvocation(dataObj[2])
+            local callerSess = store:getSession(invoc.callerSesId)
+            local details = setmetatable({}, { __jsontype = 'object' })
 
-            if invoc then
-                local callerSess = store:getSession(invoc.callerSesId)
-                local details = setmetatable({}, { __jsontype = 'object' })
+            if invoc and callerSess then
 
                 if dataObj[3].progress ~= nil and dataObj[3].progress == true then
                     details.progress = true
