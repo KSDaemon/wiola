@@ -580,7 +580,7 @@ end
 function _M:receiveData(regId, data)
     local session = store:getSession(regId)
 
-    if type(session) == nil then
+    if type(session) == 'nil' then
         return
     end
 
@@ -1175,7 +1175,7 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
 
             local invoc = store:getInvocation(dataObj[2])
-            
+
             if invoc then
                 local callerSess = store:getSession(invoc.callerSesId)
 
