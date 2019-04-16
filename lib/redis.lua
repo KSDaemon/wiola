@@ -7,7 +7,6 @@
 local _M = {}
 
 local json = require('wiola.serializers.json_serializer')
-local redis
 local config
 
 --- Format NUMBER for using in strings
@@ -132,7 +131,7 @@ end
 --- @return boolean, string is Ok flag, error description
 ---
 function _M:init(cfg)
-    local redisOk, redisErr
+    local redisOk, redisErr, redis
 
     local redisLib = require "resty.redis"
     redis = redisLib:new()
@@ -148,40 +147,57 @@ function _M:init(cfg)
         redis:select(config.storeConfig.db)
     end
 
+    ngx.ctx.redis = redis
     return redisOk, redisErr
 end
 
 ---
 --- Generate unique Id
 ---
+--- @param scope string scope to operate in
 --- @return number unique Id
 ---
-function _M:getRegId()
+function _M:getRegId(scope)
     local regId
+    local redis = ngx.ctx.redis
     local max = 2 ^ 53
-    local time = redis:time()
-
-    --    math.randomseed( os.time() ) -- Precision - only seconds, which is not acceptable
-    math.randomseed(time[1] * 1000000 + time[2])
+    local ns = "wiola" .. scope .. "Ids"
 
     repeat
         regId = math.random(max)
     --        regId = math.random(100000000000000)
-    until redis:sismember("wiolaIds", formatNumber(regId))
-
+    until redis:sismember(ns, formatNumber(regId)) == 0
+    redis:sadd(ns, formatNumber(regId))
     return regId
 end
 
 ---
+--- Remove used Id
+---
+--- @param scope string scope to operate in
+--- @param regIdStr string registered Id to remove
+--- @return number count of items removed
+---
+function _M:removeRegId(scope, regIdStr)
+    local redis = ngx.ctx.redis
+    local ns = "wiola" .. scope .. "Ids"
+    redis:srem(ns,regIdStr)
+end
+
+
+---
 --- Add new session Id to active list
 ---
---- @param regId number session registration Id
 --- @param session table Session information
+--- @return regId number session registration Id
 ---
-function _M:addSession(regId, session)
-    session.sessId = formatNumber(session.sessId)
-    redis:sadd("wiolaIds", formatNumber(regId))
-    redis:hmset("wiSes" .. formatNumber(regId), session)
+function _M:addSession(session)
+    local redis = ngx.ctx.redis
+    local regId = self:getRegId('Sessions')
+    local regIdStr = formatNumber(regId)
+    session.sessId = regIdStr
+    redis:hmset("wiSes" .. regIdStr, session)
+    return regId
 end
 
 ---
@@ -191,6 +207,7 @@ end
 --- @return table session object or nil
 ---
 function _M:getSession(regId)
+    local redis = ngx.ctx.redis
     local sessArr = redis:hgetall("wiSes" .. formatNumber(regId))
     if #sessArr > 0 then
         local session = redis:array_to_hash(sessArr)
@@ -217,6 +234,7 @@ end
 --- @param session table Session information
 ---
 function _M:changeSession(regId, session)
+    local redis = ngx.ctx.redis
     session.isWampEstablished = formatNumber(session.isWampEstablished)
     session.sessId = formatNumber(session.sessId)
     session.wampFeatures = json.encode(session.wampFeatures)
@@ -232,6 +250,7 @@ end
 --- @param regId number session registration Id
 ---
 function _M:removeSession(regId)
+    local redis = ngx.ctx.redis
     local regIdStr = formatNumber(regId)
 
     local session = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr))
@@ -239,23 +258,15 @@ function _M:removeSession(regId)
 
     local subscriptions = redis:array_to_hash(redis:hgetall("wiRealm" .. session.realm .. "Subs"))
 
-    for k, v in pairs(subscriptions) do
-        redis:srem("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions", regIdStr)
-        redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Session" .. regIdStr)
-        if redis:scard("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions") == 0 then
-            redis:del("wiRealm" .. session.realm .. "Sub" .. k .. "Sessions")
-            redis:hdel("wiRealm" .. session.realm .. "Subs",k)
-            redis:hdel("wiRealm" .. session.realm .. "RevSubs",v)
-        end
+    for _, v in pairs(subscriptions) do
+        self:unsubscribeSession(session.realm, v, regId)
     end
 
     local rpcs = redis:array_to_hash(redis:hgetall("wiSes" .. regIdStr .. "RPCs"))
 
-    for k, _ in pairs(rpcs) do
-        redis:srem("wiRealm" .. session.realm .. "RPCs",k)
-        redis:del("wiRealm" .. session.realm .. "RPC" .. k)
+    for _, v in pairs(rpcs) do
+        self:unregisterSessionRPC(session.realm, v, regId)
     end
-
     redis:del("wiSes" .. regIdStr .. "RPCs")
     redis:del("wiSes" .. regIdStr .. "RevRPCs")
     redis:del("wiSes" .. regIdStr .. "Challenge")
@@ -267,7 +278,7 @@ function _M:removeSession(regId)
 
     redis:del("wiSes" .. regIdStr .. "Data")
     redis:del("wiSes" .. regIdStr)
-    redis:srem("wiolaIds",regIdStr)
+    self:removeRegId('Sessions', regIdStr)
 end
 
 ---
@@ -278,6 +289,7 @@ end
 --- @return number, table session count, session Ids array
 ---
 function _M:getSessionCount(realm, authroles)
+    local redis = ngx.ctx.redis
     local count = 0
     local sessionsIdList = {}
     local allSessions = redis:smembers("wiRealm" .. realm .. "Sessions")
@@ -307,6 +319,7 @@ end
 --- @param data table data for client
 ---
 function _M:putData(session, data)
+    local redis = ngx.ctx.redis
     redis:rpush("wiSes" .. formatNumber(session.sessId) .. "Data", data)
 end
 
@@ -318,6 +331,7 @@ end
 --- @return any client data
 ---
 function _M:getPendingData(regId, last)
+    local redis = ngx.ctx.redis
     if last == true then
         return redis:rpop("wiSes" .. formatNumber(regId) .. "Data")
     else
@@ -332,6 +346,7 @@ end
 --- @param flags table flags data
 ---
 function _M:setHandlerFlags(regId, flags)
+    local redis = ngx.ctx.redis
     return redis:hmset("wiSes" .. formatNumber(regId) .. "HandlerFlags", flags)
 end
 
@@ -342,8 +357,9 @@ end
 --- @return table flags data
 ---
 function _M:getHandlerFlags(regId)
+    local redis = ngx.ctx.redis
     local flarr = redis:hgetall("wiSes" .. formatNumber(regId) .. "HandlerFlags")
-    if #flarr > 0 then
+    if type(flarr) == 'table' and #flarr > 0 then
         local fl = redis:array_to_hash(flarr)
 
         return fl
@@ -359,6 +375,7 @@ end
 --- @return table challenge info object
 ---
 function _M:getChallenge(regId)
+    local redis = ngx.ctx.redis
     local challenge = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(regId) .. "Challenge"))
     challenge.session = tonumber(challenge.session)
     return challenge
@@ -371,6 +388,7 @@ end
 --- @param challenge table Challenge information
 ---
 function _M:changeChallenge(regId, challenge)
+    local redis = ngx.ctx.redis
     if challenge.session then
         challenge.session = formatNumber(challenge.session)
     end
@@ -383,6 +401,7 @@ end
 --- @param regId number session registration Id
 ---
 function _M:removeChallenge(regId)
+    local redis = ngx.ctx.redis
     redis:del("wiSes" .. formatNumber(regId) .. "Challenge")
 end
 
@@ -393,6 +412,7 @@ end
 --- @param realm string session realm
 ---
 function _M:addSessionToRealm(regId, realm)
+    local redis = ngx.ctx.redis
 
     if redis:sismember("wiolaRealms", realm) == 0 then
         redis:sadd("wiolaRealms", realm)
@@ -409,6 +429,7 @@ end
 --- @return number subscription Id
 ---
 function _M:getSubscriptionId(realm, uri)
+    local redis = ngx.ctx.redis
     return tonumber(redis:hget("wiRealm" .. realm .. "Subs", uri))
 end
 
@@ -421,13 +442,14 @@ end
 --- @param regId number session registration Id
 ---
 function _M:subscribeSession(realm, uri, options, regId)
+    local redis = ngx.ctx.redis
     local subscriptionIdStr = redis:hget("wiRealm" .. realm .. "Subs", uri)
     local subscriptionId = tonumber(subscriptionIdStr)
     local isNewSubscription = false
     local regIdStr = formatNumber(regId)
 
     if not subscriptionId then
-        subscriptionId = self:getRegId()
+        subscriptionId = self:getRegId('Subscriptions')
         isNewSubscription = true
         subscriptionIdStr = formatNumber(subscriptionId)
         redis:hset("wiRealm" .. realm .. "Subs", uri, subscriptionIdStr)
@@ -453,6 +475,7 @@ end
 --- @return boolean, boolean was session unsubscribed from topic, was topic removed
 ---
 function _M:unsubscribeSession(realm, subscId, regId)
+    local redis = ngx.ctx.redis
     local subscIdStr = formatNumber(subscId)
     local regIdStr = formatNumber(regId)
     local subscr = redis:hget("wiRealm" .. realm .. "RevSubs", subscIdStr)
@@ -466,6 +489,7 @@ function _M:unsubscribeSession(realm, subscId, regId)
         redis:hdel("wiRealm" .. realm .. "Subs", subscr)
         redis:hdel("wiRealm" .. realm .. "RevSubs", subscIdStr)
         redis:del("wiRealm" .. realm .. "Sub" .. subscr)
+        self:removeRegId('Subscriptions', subscIdStr)
         wasTopicRemoved = true
     end
 
@@ -480,6 +504,7 @@ end
 --- @return table array of session Ids subscribed to subscription
 ---
 function _M:getTopicSessionsBySubId(realm, subscId)
+    local redis = ngx.ctx.redis
     local uri = redis:hget("wiRealm" .. realm .. "RevSubs", formatNumber(subscId))
     if uri ~= ngx.null then
         return redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
@@ -496,6 +521,7 @@ end
 --- @return table array of session Ids subscribed to subscription
 ---
 function _M:getTopicSessionsCountBySubId(realm, subscId)
+    local redis = ngx.ctx.redis
     local uri = redis:hget("wiRealm" .. realm .. "RevSubs", formatNumber(subscId))
     if uri ~= ngx.null then
         return redis:scard("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
@@ -512,6 +538,7 @@ end
 --- @return table array of session Ids subscribed to topic
 ---
 function _M:getTopicSessions(realm, uri)
+    local redis = ngx.ctx.redis
     return redis:smembers("wiRealm" .. realm .. "Sub" .. uri .. "Sessions")
 end
 
@@ -525,7 +552,7 @@ end
 --- @return table array of session Ids to deliver event
 ---
 function _M:getEventRecipients(realm, uri, regId, options)
-
+    local redis = ngx.ctx.redis
     local regIdStr = formatNumber(regId)
     local recipients = {}
     local details = {}
@@ -606,6 +633,7 @@ end
 --- @return table array of session Ids to deliver event
 ---
 function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
+    local redis = ngx.ctx.redis
     local recipients
 
     local tmpK = "wiSes" .. regIdStr .. "TmpSetK"
@@ -716,6 +744,7 @@ end
 --- @return table array of subscriptions Ids
 ---
 function _M:getSubscriptions(realm)
+    local redis = ngx.ctx.redis
     local subsIds = { exact = {}, prefix = {}, wildcard = {} }
     -- TODO Make count of prefix/wildcard subscriptions
     local allSubs = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "Subs"))
@@ -735,6 +764,7 @@ end
 --- @return table RPC object
 ---
 function _M:getRPC(realm, uri)
+    local redis = ngx.ctx.redis
     local rpc = redis:hgetall("wiRealm" .. realm .. "RPC" .. uri)
 
     if #rpc < 2 then -- no exactly matched rpc uri found
@@ -773,11 +803,12 @@ end
 --- @return number RPC registration Id
 ---
 function _M:registerSessionRPC(realm, uri, options, regId)
+    local redis = ngx.ctx.redis
     local registrationId, registrationIdStr
     local regIdStr = formatNumber(regId)
 
     if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
-        registrationId = self:getRegId()
+        registrationId = self:getRegId('Registrations')
         registrationIdStr = formatNumber(registrationId)
 
         redis:sadd("wiRealm" .. realm .. "RPCs", uri)
@@ -804,6 +835,7 @@ end
 ---
 function _M:registerMetaRpc(realm)
 
+    local redis = ngx.ctx.redis
     local uris = {}
 
     if config.metaAPI.session == true then
@@ -834,7 +866,7 @@ function _M:registerMetaRpc(realm)
     for _, uri in ipairs(uris) do
 
         if redis:sismember("wiRealm" .. realm .. "RPCs", uri) ~= 1 then
-            registrationId = self:getRegId()
+            registrationId = self:getRegId('Registrations')
             registrationIdStr = formatNumber(registrationId)
 
             redis:sadd("wiRealm" .. realm .. "RPCs", uri)
@@ -855,6 +887,7 @@ end
 --- @return table RPC object
 ---
 function _M:unregisterSessionRPC(realm, registrationId, regId)
+    local redis = ngx.ctx.redis
     local regIdStr = formatNumber(regId)
     local registrationIdStr = formatNumber(registrationId)
 
@@ -864,6 +897,7 @@ function _M:unregisterSessionRPC(realm, registrationId, regId)
         redis:hdel("wiSes" .. regIdStr .. "RevRPCs", registrationIdStr)
         redis:del("wiRealm" .. realm .. "RPC" .. rpc)
         redis:srem("wiRealm" .. realm .. "RPCs", rpc)
+        self:removeRegId('Registrations', registrationIdStr)
     end
 
     return rpc
@@ -876,6 +910,7 @@ end
 --- @return table Invocation object
 ---
 function _M:getInvocation(invocReqId)
+    local redis = ngx.ctx.redis
     local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. formatNumber(invocReqId)))
     invoc.CallReqId = tonumber(invoc.CallReqId)
     invoc.CallReqId = tonumber(invoc.CallReqId)
@@ -888,6 +923,7 @@ end
 --- @param invocReqId number invocation request Id
 ---
 function _M:removeInvocation(invocReqId)
+    local redis = ngx.ctx.redis
     redis:del("wiInvoc" .. formatNumber(invocReqId))
 end
 
@@ -898,6 +934,7 @@ end
 --- @return table Call object
 ---
 function _M:getCall(callReqId)
+    local redis = ngx.ctx.redis
     local call = redis:array_to_hash(redis:hgetall("wiCall" .. formatNumber(callReqId)))
     call.calleeSesId = tonumber(call.calleeSesId)
     call.wiInvocId = tonumber(call.wiInvocId)
@@ -910,6 +947,7 @@ end
 --- @param callReqId number call request Id
 ---
 function _M:removeCall(callReqId)
+    local redis = ngx.ctx.redis
     redis:del("wiCall" .. formatNumber(callReqId))
 end
 
@@ -922,6 +960,7 @@ end
 --- @param calleeSessId number callee session registration Id
 ---
 function _M:addCallInvocation(callReqId, callerSessId, invocReqId, calleeSessId)
+    local redis = ngx.ctx.redis
     local callReqIdStr = formatNumber(callReqId)
     local callerSessIdStr = formatNumber(callerSessId)
     local invocReqIdStr = formatNumber(invocReqId)

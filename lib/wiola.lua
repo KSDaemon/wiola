@@ -7,7 +7,7 @@
 
 
 local _M = {
-    _VERSION = '0.10.0',
+    _VERSION = '0.12.0',
 }
 
 _M.__index = _M
@@ -143,7 +143,6 @@ end
 ---
 function _M:_randomString(length)
     local str = {};
-    math.randomseed(math.floor(ngx.now()*1000))
 
     for _ = 1, length do
         table.insert(str, string.char(math.random(32, 126)))
@@ -191,8 +190,7 @@ end
 --- @return number, string WAMP session registration ID, connection data type
 ---
 function _M:addConnection(sid, wampProto)
-    local regId = store:getRegId()
-    local dataType
+    local regId, dataType
 
     if wampProto == nil or wampProto == "" then
         wampProto = 'wamp.2.json' -- Setting default protocol for encoding/decodig use
@@ -204,9 +202,9 @@ function _M:addConnection(sid, wampProto)
         dataType = 'text'
     end
 
-    store:addSession(regId, {
+    regId = store:addSession({
         connId = sid,
-        sessId = regId,
+        sessId = 0,
         isWampEstablished = 0,
         --        realm = nil,
         --        wamp_features = nil,
@@ -278,7 +276,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
         return
     end
 
-    local pubId = store:getRegId()
+    local pubId = store:getRegId('Publications')
     local recipients = store:getTopicSessions(session.realm, eventUri)
     local parameters = {n = select('#', ...), ...}
     local argsL, argsKW = { session.sessId }, nil
@@ -836,7 +834,7 @@ function _M:receiveData(regId, data)
         -- WAMP SPEC: [PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]
         if session.isWampEstablished == 1 then
             if self:_validateURI(dataObj[4], false, false) then
-                local pubId = store:getRegId()
+                local pubId = store:getRegId('Publications')
 
                 local options = dataObj[3]
                 if config.trustLevels.authType ~= "none" then
@@ -979,7 +977,7 @@ function _M:receiveData(regId, data)
                         end
 
                         local calleeSess = store:getSession(rpcInfo.calleeSesId)
-                        local invReqId = store:getRegId()
+                        local invReqId = store:getRegId('Invocations')
 
                         if rpcInfo.options and rpcInfo.options.procedure then
                             details.procedure = rpcInfo.options.procedure

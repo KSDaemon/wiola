@@ -3,10 +3,17 @@
 -- User: Konstantin Burkalev
 -- Date: 16.03.14
 --
+
+
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
-local webSocket, wampServer, ok, err, bytes, pingCo
+local semaphore = require "ngx.semaphore"
+local sema = semaphore.new()
+local mime = require("mime")
+local wampServer, webSocket, ok, err, pingCo
+local socketData = {}
+local storeDataCount = 0
 
 webSocket, err = wsServer:new({
     timeout = config.socketTimeout,
@@ -25,6 +32,7 @@ end
 local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
 
 local function removeConnection(_, sessId)
+    local ok, err
 
     local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
@@ -47,10 +55,11 @@ end
 
 if config.pingInterval > 0 then
     local pinger = function (period)
+        local bytes, lerr
         coroutine.yield()
 
         while true do
-            bytes, err = webSocket:send_ping()
+            bytes, lerr = webSocket:send_ping()
             if not bytes then
                 ngx.timer.at(0, removeConnection, sessionId)
                 ngx.exit(ngx.ERROR)
@@ -62,62 +71,134 @@ if config.pingInterval > 0 then
     pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
 end
 
-while true do
-    local cliData, data, typ, hflags
-    hflags = wampServer:getHandlerFlags(sessionId)
-    cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+local redNotifier = function ()
+    local redisOk, redis, lres, lerr
+    local redisLib = require "resty.redis"
 
-    if cliData ~= ngx.null and cliData then
-        if dataType == 'binary' then
-            bytes, err = webSocket:send_binary(cliData)
-        else
-            bytes, err = webSocket:send_text(cliData)
-        end
+    redis = redisLib:new()
+    redis:set_timeout(0)
 
-        if not bytes then
-        end
+    if config.storeConfig.port == nil then
+        redisOk, lerr = redis:connect(config.storeConfig.host)
+    else
+        redisOk, lerr = redis:connect(config.storeConfig.host, config.storeConfig.port)
     end
 
-    if hflags.close == true then
-        if pingCo then
-            ngx.thread.kill(pingCo)
-        end
-        webSocket:send_close(1000, "Closing connection")
-        ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.OK)
+    if redisOk and config.storeConfig.db ~= nil then
+        redis:select(config.storeConfig.db)
     end
 
-    if webSocket.fatal then
+    if not redisOk then
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
     end
 
-    data, typ = webSocket:recv_frame()
-
-    if typ == "close" then
-        if pingCo then
-            ngx.thread.kill(pingCo)
-        end
-        webSocket:send_close(1000, "Closing connection")
+    local sesskey = "__keyspace@" ..
+            (config.storeConfig.db or 0) ..
+            "__:wiSes" ..
+            string.format("%.0f", sessionId) ..
+            "Data"
+    lres, lerr = redis:subscribe(sesskey)
+    if not lres then
         ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.OK)
-        break
+        ngx.exit(ngx.ERROR)
+    end
 
-    elseif typ == "ping" then
+    coroutine.yield()
 
-        bytes, err = webSocket:send_pong()
-        if not bytes then
+    while true do
+        lres, lerr = redis:read_reply()
+        if not lres then
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.ERROR)
+        end
+        if lres[1] == "message" and lres[3] == "rpush" then
+            storeDataCount = storeDataCount + 1
+            sema:post(1)
+        end
+    end
+end
+
+ngx.thread.spawn(redNotifier)
+
+local SocketHandler = function ()
+    while true do
+        local data, typ, bytes, lerr
+
+        if webSocket.fatal then
             ngx.timer.at(0, removeConnection, sessionId)
             ngx.exit(ngx.ERROR)
         end
 
---    elseif typ == "pong" then
+        data, typ = webSocket:recv_frame()
 
-    elseif typ == "text" then -- Received something texty
-        wampServer:receiveData(sessionId, data)
+        if typ == "close" then
+            if pingCo then
+                ngx.thread.kill(pingCo)
+            end
+            webSocket:send_close(1000, "Closing connection")
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.OK)
+            break
 
-    elseif typ == "binary" then -- Received something binary
-        wampServer:receiveData(sessionId, data)
+        elseif typ == "ping" then
 
+            bytes, lerr = webSocket:send_pong()
+            if not bytes then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+
+    --    elseif typ == "pong" then
+
+        elseif typ == "text" then -- Received something texty
+            table.insert(socketData, data)
+            sema:post(1)
+
+        elseif typ == "binary" then -- Received something binary
+            table.insert(socketData, data)
+            sema:post(1)
+        end
+    end
+end
+
+ngx.thread.spawn(SocketHandler)
+
+while true do
+    local ok, err = sema:wait(60)  -- wait for a second at most
+    if not ok then
+    else
+        local hflags, cliData, bytes
+
+        while storeDataCount > 0 do
+            hflags = wampServer:getHandlerFlags(sessionId)
+            cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+
+            if cliData ~= ngx.null and cliData then
+                if dataType == 'binary' then
+                    bytes, err = webSocket:send_binary(cliData)
+                else
+                    bytes, err = webSocket:send_text(cliData)
+                end
+
+                if not bytes then
+                end
+            end
+
+            if hflags.close == true then
+                if pingCo then
+                    ngx.thread.kill(pingCo)
+                end
+                webSocket:send_close(1000, "Closing connection")
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.OK)
+            end
+
+            storeDataCount = storeDataCount - 1
+        end
+
+        while #socketData > 0 do
+            wampServer:receiveData(sessionId, table.remove(socketData, 1))
+        end
     end
 end

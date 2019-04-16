@@ -7,7 +7,7 @@
 --local getdump = require("debug.vardump").getdump
 
 local _M = {
-    _VERSION = '0.11.0',
+    _VERSION = '0.12.0',
 }
 
 _M.__index = _M
@@ -122,7 +122,7 @@ end
 ---
 --- Create a new instance
 ---
---- @return wiola instance
+--- @return table wiola instance
 ---
 function _M.new()
     local self = setmetatable({}, _M)
@@ -252,11 +252,13 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
 
     local data
     if not args and not argsKW then
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }) }
     elseif args and not argsKW then
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }),
+            setmetatable(args, { __jsontype = 'array' }) }
     else
-        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, details, args, argsKW }
+        data = { WAMP_MSG_SPEC.EVENT, subId, pubId, setmetatable(details, { __jsontype = 'object' }),
+            setmetatable(args, { __jsontype = 'array' }), argsKW }
     end
 
     for _, v in ipairs(sessRegIds) do
@@ -286,6 +288,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
     local recipients = store:getTopicSessions(session.realm, eventUri)
     local parameters = {n = select('#', ...), ...}
     local argsL, argsKW = { session.sessId }, nil
+    local details = {}
 
     if eventUri == 'wamp.session.on_join' then
         argsL = {{ session = session.sessId }}
@@ -329,7 +332,7 @@ function _M:_publishMetaEvent(part, eventUri, session, ...)
         table.insert(argsL, parameters[1])
     end
 
-    self:_publishEvent(recipients, subId, pubId, {}, argsL, argsKW)
+    self:_publishEvent(recipients, subId, pubId, details, argsL, argsKW)
 end
 
 ---
@@ -577,6 +580,10 @@ end
 function _M:receiveData(regId, data)
     local session = store:getSession(regId)
 
+    if type(session) == 'nil' then
+        return
+    end
+
     local dataObj = serializers[session.encoding].decode(data)
 
     ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
@@ -801,37 +808,39 @@ function _M:receiveData(regId, data)
                 local invoc = store:getInvocation(dataObj[3])
                 local callerSess = store:getSession(invoc.callerSesId)
 
-                if #dataObj == 6 then
-                    -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
-                    self:_putData(callerSess, {
-                        WAMP_MSG_SPEC.ERROR,
-                        WAMP_MSG_SPEC.CALL,
-                        invoc.CallReqId,
-                        setmetatable({}, { __jsontype = 'object' }),
-                        dataObj[5],
-                        dataObj[6]
-                    })
-                elseif #dataObj == 7 then
-                    -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri,
-                    --             Arguments|list, ArgumentsKw|dict]
-                    self:_putData(callerSess, {
-                        WAMP_MSG_SPEC.ERROR,
-                        WAMP_MSG_SPEC.CALL,
-                        invoc.CallReqId,
-                        setmetatable({}, { __jsontype = 'object' }),
-                        dataObj[5],
-                        dataObj[6],
-                        dataObj[7]
-                    })
-                else
-                    -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
-                    self:_putData(callerSess, {
-                        WAMP_MSG_SPEC.ERROR,
-                        WAMP_MSG_SPEC.CALL,
-                        invoc.CallReqId,
-                        setmetatable({}, { __jsontype = 'object' }),
-                        dataObj[5]
-                    })
+                if invoc and callerSess then
+                    if #dataObj == 6 then
+                        -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri, Arguments|list]
+                        self:_putData(callerSess, {
+                            WAMP_MSG_SPEC.ERROR,
+                            WAMP_MSG_SPEC.CALL,
+                            invoc.CallReqId,
+                            setmetatable({}, { __jsontype = 'object' }),
+                            dataObj[5],
+                            setmetatable(dataObj[6], { __jsontype = 'array' })
+                        })
+                    elseif #dataObj == 7 then
+                        -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri,
+                        --             Arguments|list, ArgumentsKw|dict]
+                        self:_putData(callerSess, {
+                            WAMP_MSG_SPEC.ERROR,
+                            WAMP_MSG_SPEC.CALL,
+                            invoc.CallReqId,
+                            setmetatable({}, { __jsontype = 'object' }),
+                            dataObj[5],
+                            setmetatable(dataObj[6], { __jsontype = 'array' }),
+                            dataObj[7]
+                        })
+                    else
+                        -- WAMP SPEC: [ERROR, CALL, CALL.Request|id, Details|dict, Error|uri]
+                        self:_putData(callerSess, {
+                            WAMP_MSG_SPEC.ERROR,
+                            WAMP_MSG_SPEC.CALL,
+                            invoc.CallReqId,
+                            setmetatable({}, { __jsontype = 'object' }),
+                            dataObj[5]
+                        })
+                    end
                 end
 
                 store:removeInvocation(dataObj[3])
@@ -1040,7 +1049,7 @@ function _M:receiveData(regId, data)
                                 invReqId,
                                 rpcInfo.registrationId,
                                 details,
-                                dataObj[5]
+                                setmetatable(dataObj[5], { __jsontype = 'array' })
                             })
                         elseif #dataObj == 6 then
                             -- WAMP SPEC: [INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict,
@@ -1050,7 +1059,7 @@ function _M:receiveData(regId, data)
                                 invReqId,
                                 rpcInfo.registrationId,
                                 details,
-                                dataObj[5],
+                                setmetatable(dataObj[5], { __jsontype = 'array' }),
                                 dataObj[6]
                             })
                         else
@@ -1166,25 +1175,33 @@ function _M:receiveData(regId, data)
         if session.isWampEstablished == 1 then
 
             local invoc = store:getInvocation(dataObj[2])
-            local callerSess = store:getSession(invoc.callerSesId)
-            local details = setmetatable({}, { __jsontype = 'object' })
 
-            if dataObj[3].progress ~= nil and dataObj[3].progress == true then
-                details.progress = true
-            else
-                store:removeInvocation(dataObj[2])
-                store:removeCall(invoc.CallReqId)
-            end
+            if invoc then
+                local callerSess = store:getSession(invoc.callerSesId)
 
-            if #dataObj == 4 then
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4] })
-            elseif #dataObj == 5 then
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details, dataObj[4], dataObj[5] })
-            else
-                -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
-                self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
+                if callerSess then
+                    local details = setmetatable({}, { __jsontype = 'object' })
+
+                    if dataObj[3].progress ~= nil and dataObj[3].progress == true then
+                        details.progress = true
+                    else
+                        store:removeInvocation(dataObj[2])
+                        store:removeCall(invoc.CallReqId)
+                    end
+
+                    if #dataObj == 4 then
+                        -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]
+                        self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details,
+                            setmetatable(dataObj[4], { __jsontype = 'array' }) })
+                    elseif #dataObj == 5 then
+                        -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]
+                        self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details,
+                            setmetatable(dataObj[4], { __jsontype = 'array' }), dataObj[5] })
+                    else
+                        -- WAMP SPEC: [RESULT, CALL.Request|id, Details|dict]
+                        self:_putData(callerSess, { WAMP_MSG_SPEC.RESULT, invoc.CallReqId, details })
+                    end
+                end
             end
         else
             self:_putData(session, {

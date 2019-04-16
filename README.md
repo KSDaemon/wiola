@@ -230,6 +230,16 @@ stream {
 }
 ```
 
+Also, starting from v0.12.0 Wiola uses Redis pubsub system instead of polling for retreiving client data.
+So you need to configure Redis server and enable keyspace-events. Btw, you do not need to enable all events.
+Wiola needs only keyspace events for list.
+
+Edit redis.conf and set notify-keyspace-events option.
+
+```
+notify-keyspace-events "Kl"
+```  
+
 Actually, you do not need to do anything else. Just take any WAMP client and make a connection.
 
 [Back to TOC](#table-of-contents)
@@ -583,6 +593,9 @@ See Also
 
 [Back to TOC](#table-of-contents)
 
+Thanks JetBrains for support! Best IDEs for every language!
+
+[![JetBrains](https://user-images.githubusercontent.com/458096/54276284-086cad00-459e-11e9-9684-47536d9520c4.png)](https://www.jetbrains.com/?from=wampy.js)
 
 [WAMP specification]: http://wamp-proto.org/
 [Challenge Response Authentication section in WAMP Specification]: https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3

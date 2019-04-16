@@ -19,7 +19,7 @@ end
 ---
 --- @param t table array table
 --- @param obj any object to search
---- @return index of obj or -1 if not found
+--- @return number index of obj or -1 if not found
 ---------------------------------------------------
 local arrayIndexOf = function(t, obj)
     if type(t) == 'table' then
@@ -197,7 +197,7 @@ end
 --- Add new session Id to active list
 ---
 --- @param session table Session information
---- @return regId number session registration Id
+--- @return number number session registration Id
 ---
 function _M:addSession(session)
     local redis = ngx.ctx.redis
@@ -216,7 +216,7 @@ end
 ---
 function _M:getSession(regId)
     local redis = ngx.ctx.redis
-    local sessArr = redis:hgetall("wiSes" .. formatNumber(regId))
+    local sessArr = redis:hgetall("wiSes" .. formatNumber(regId)) or {}
     if #sessArr > 0 then
         local session = redis:array_to_hash(sessArr)
         session.isWampEstablished = tonumber(session.isWampEstablished)
@@ -931,10 +931,17 @@ end
 ---
 function _M:getInvocation(invocReqId)
     local redis = ngx.ctx.redis
-    local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. formatNumber(invocReqId)))
-    invoc.CallReqId = tonumber(invoc.CallReqId)
-    invoc.CallReqId = tonumber(invoc.CallReqId)
-    return invoc
+
+    local invocArr = redis:hgetall("wiInvoc" .. formatNumber(invocReqId))
+
+    if type(invocArr) ~= 'nil' then
+        local invoc = redis:array_to_hash(invocArr)
+        invoc.CallReqId = tonumber(invoc.CallReqId)
+        invoc.CallReqId = tonumber(invoc.CallReqId)
+        return invoc
+    end
+
+    return nil
 end
 
 ---
