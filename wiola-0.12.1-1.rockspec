@@ -1,9 +1,9 @@
 package = "Wiola"
-version = "0.12.0-1"
+version = "0.12.1-1"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
-    tag = "v0.12.0"
+    tag = "v0.12.1"
 }
 
 description = {
@@ -32,14 +32,14 @@ build = {
     type = 'builtin',
     modules = {
         ['wiola'] = 'lib/wiola.lua',
-        ['wiola.config'] = 'lib/config.lua',
-        ['wiola.flushdb'] = 'lib/flushdb.lua',
-        ['wiola.ws-handler'] = 'lib/ws-handler.lua',
-        ['wiola.raw-handler'] = 'lib/raw-handler.lua',
-        ['wiola.headers'] = 'lib/headers.lua',
-        ['wiola.post-handler'] = 'lib/post-handler.lua',
+        ['wiola.config'] = 'lib/wiola/config.lua',
+        ['wiola.flushdb'] = 'lib/wiola/flushdb.lua',
+        ['wiola.ws-handler'] = 'lib/wiola/ws-handler.lua',
+        ['wiola.raw-handler'] = 'lib/wiola/raw-handler.lua',
+        ['wiola.headers'] = 'lib/wiola/headers.lua',
+        ['wiola.post-handler'] = 'lib/wiola/post-handler.lua',
         ['wiola.serializers.json_serializer'] = 'lib/json_serializer.lua',
-        ['wiola.serializers.msgpack_serializer'] = 'lib/msgpack_serializer.lua',
-        ['wiola.stores.redis'] = 'lib/redis.lua',
+        ['wiola.serializers.msgpack_serializer'] = 'lib/wiola/serializers/msgpack_serializer.lua',
+        ['wiola.stores.redis'] = 'lib/wiola/stores/redis.lua',
     }
 }
