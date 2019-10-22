@@ -19,7 +19,7 @@ end
 ---
 --- @param t table array table
 --- @param obj any object to search
---- @return index of obj or -1 if not found
+--- @return number index of obj or -1 if not found
 ---------------------------------------------------
 local arrayIndexOf = function(t, obj)
     if type(t) == 'table' then
@@ -63,7 +63,9 @@ local findPatternedUri = function(uriList, uri, all)
 
     -- trying to find prefix matched uri
     for _, value in ipairs(uriList) do
+        ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", "^" .. string.gsub(value, "%.", "%%.") .. "%.")
         if string.match(uri, "^" .. string.gsub(value, "%.", "%%.") .. "%.") then
+            ngx.log(ngx.DEBUG, "Found match: ", uri, " in ", value)
             if all then
                 table.insert(matchedUris, value)
             else
@@ -71,6 +73,8 @@ local findPatternedUri = function(uriList, uri, all)
             end
         end
     end
+
+    ngx.log(ngx.DEBUG, "Not found any prefix match")
 
     local compWldCrd
     compWldCrd = function(p1,p2)
@@ -110,8 +114,10 @@ local findPatternedUri = function(uriList, uri, all)
 
         if c ~= nil then    -- it's wildcard uri
             local re = "^" .. string.gsub(replUri, "%.", "%%.") .. "$"
+            ngx.log(ngx.DEBUG, "Matching ", uri, " for pattern: ", re)
 
             if string.match(uri, re) then
+                ngx.log(ngx.DEBUG, "Found match: ", uri, " in ", value)
                 if all then
                     table.insert(matchedUris, value)
                 else
@@ -168,6 +174,8 @@ function _M:getRegId(scope)
     --        regId = math.random(100000000000000)
     until redis:sismember(ns, formatNumber(regId)) == 0
     redis:sadd(ns, formatNumber(regId))
+
+    ngx.log(ngx.DEBUG, "Generated unique Id in scope ", scope, ": ", regId, " (", formatNumber(regId), ")")
     return regId
 end
 
@@ -189,7 +197,7 @@ end
 --- Add new session Id to active list
 ---
 --- @param session table Session information
---- @return regId number session registration Id
+--- @return number number session registration Id
 ---
 function _M:addSession(session)
     local redis = ngx.ctx.redis
@@ -208,7 +216,7 @@ end
 ---
 function _M:getSession(regId)
     local redis = ngx.ctx.redis
-    local sessArr = redis:hgetall("wiSes" .. formatNumber(regId))
+    local sessArr = redis:hgetall("wiSes" .. formatNumber(regId)) or {}
     if #sessArr > 0 then
         local session = redis:array_to_hash(sessArr)
         session.isWampEstablished = tonumber(session.isWampEstablished)
@@ -415,6 +423,7 @@ function _M:addSessionToRealm(regId, realm)
     local redis = ngx.ctx.redis
 
     if redis:sismember("wiolaRealms", realm) == 0 then
+        ngx.log(ngx.DEBUG, "No realm ", realm, " found. Creating...")
         redis:sadd("wiolaRealms", realm)
         self:registerMetaRpc(realm)
     end
@@ -644,6 +653,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.eligible then -- There is eligible list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is eligible list")
         for _, v in ipairs(options.eligible) do
             redis:sadd(tmpL, formatNumber(v))
         end
@@ -653,6 +663,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.eligible_authid then -- There is eligible authid list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authid list")
 
         for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
@@ -669,6 +680,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.eligible_authrole then -- There is eligible authrole list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is eligible authrole list")
 
         for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
@@ -685,6 +697,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.exclude then -- There is exclude list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is exclude list")
         for _, v in ipairs(options.exclude) do
             redis:sadd(tmpL, formatNumber(v))
         end
@@ -694,6 +707,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.exclude_authid then -- There is exclude authid list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authid list")
 
         for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
@@ -710,6 +724,7 @@ function _M:filterEventRecipients(regIdStr, options, sessionsIdList)
     end
 
     if options.exclude_authrole then -- There is exclude authrole list
+        ngx.log(ngx.DEBUG, "PUBLISH: There is exclude authrole list")
 
         for _, v in ipairs(redis:smembers(tmpK)) do
             local s = redis:array_to_hash(redis:hgetall("wiSes" .. formatNumber(v)))
@@ -768,6 +783,8 @@ function _M:getRPC(realm, uri)
     local rpc = redis:hgetall("wiRealm" .. realm .. "RPC" .. uri)
 
     if #rpc < 2 then -- no exactly matched rpc uri found
+
+        ngx.log(ngx.DEBUG, "no exactly matched rpc uri found")
         local allRPCs = redis:smembers("wiRealm" .. realm .. "RPCs")
         local patternRPCs = {}
 
@@ -778,6 +795,8 @@ function _M:getRPC(realm, uri)
             end
         end
         local matchedUri = findPatternedUri(patternRPCs, uri, false)[1]
+
+        ngx.log(ngx.DEBUG, "matchedUri: ", matchedUri, " found for ", uri)
         if matchedUri then
             rpc = redis:array_to_hash(redis:hgetall("wiRealm" .. realm .. "RPC" .. matchedUri))
             rpc.options = { procedure = uri }
@@ -834,6 +853,7 @@ end
 --- @param realm string realm
 ---
 function _M:registerMetaRpc(realm)
+    ngx.log(ngx.DEBUG, "Registering Meta RPCs in realm: ", realm)
 
     local redis = ngx.ctx.redis
     local uris = {}
@@ -911,10 +931,17 @@ end
 ---
 function _M:getInvocation(invocReqId)
     local redis = ngx.ctx.redis
-    local invoc = redis:array_to_hash(redis:hgetall("wiInvoc" .. formatNumber(invocReqId)))
-    invoc.CallReqId = tonumber(invoc.CallReqId)
-    invoc.CallReqId = tonumber(invoc.CallReqId)
-    return invoc
+
+    local invocArr = redis:hgetall("wiInvoc" .. formatNumber(invocReqId))
+
+    if type(invocArr) ~= 'nil' then
+        local invoc = redis:array_to_hash(invocArr)
+        invoc.CallReqId = tonumber(invoc.CallReqId)
+        invoc.CallReqId = tonumber(invoc.CallReqId)
+        return invoc
+    end
+
+    return nil
 end
 
 ---
