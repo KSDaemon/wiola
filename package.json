@@ -1,6 +1,6 @@
 {
   "name": "Wiola",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "WAMP implementation in Lua",
   "repository": {
     "type": "git",
@@ -16,9 +16,11 @@
   },
   "homepage": "http://ksdaemon.github.io/wiola/",
   "devDependencies": {
-    "grunt": "^1.0.3",
+    "grunt": "^1.0.4",
+    "grunt-contrib-clean": "^2.0.0",
     "grunt-contrib-copy": "^1.0.0",
-    "wampy": "^6.2.0",
+    "load-grunt-tasks": "^5.1.0",
+    "wampy": "^6.2.2",
     "wampy-cra": "^0.1.1"
   }
 }
