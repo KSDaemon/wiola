@@ -1,5 +1,5 @@
 package = "Wiola"
-version = "0.12.1-1"
+version = "0.12.1-2"
 
 source = {
     url = "git://github.com/KSDaemon/wiola.git",
@@ -38,7 +38,7 @@ build = {
         ['wiola.raw-handler'] = 'lib/wiola/raw-handler.lua',
         ['wiola.headers'] = 'lib/wiola/headers.lua',
         ['wiola.post-handler'] = 'lib/wiola/post-handler.lua',
-        ['wiola.serializers.json_serializer'] = 'lib/json_serializer.lua',
+        ['wiola.serializers.json_serializer'] = 'lib/wiola/serializers/json_serializer.lua',
         ['wiola.serializers.msgpack_serializer'] = 'lib/wiola/serializers/msgpack_serializer.lua',
         ['wiola.stores.redis'] = 'lib/wiola/stores/redis.lua',
     }
