@@ -120,6 +120,7 @@ http {
         cfg.config({
             socketTimeout = 1000,           -- one second
             maxPayloadLen = 65536,
+            pingInterval = 1000,  -- interval in ms for sending ping frames. set to 0 for disabling
             realms = { "app", "admin" },
             store = "redis",
             storeConfig = {
