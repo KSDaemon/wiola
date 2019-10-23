@@ -10,7 +10,6 @@ local _M = {}
 --- Cleans up all wiola sessions data in redis store
 ---
 function _M.flushAll()
-    ngx.log(ngx.DEBUG, "Cleaning up all wiola sessions...")
 
     local conf = require("wiola.config").config()
     local redis = require "redis"
@@ -21,8 +20,6 @@ function _M.flushAll()
     end
 
     client:flushdb()
-
-    ngx.log(ngx.DEBUG, "Sessions data successfully cleared!")
 end
 
 return _M

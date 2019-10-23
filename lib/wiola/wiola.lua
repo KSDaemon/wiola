@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
---local getdump = require("debug.vardump").getdump
+
 
 local _M = {
     _VERSION = '0.12.1',
@@ -167,7 +167,6 @@ function _M:_validateURI(uri, patternBased, allowWAMP)
     end
 
     local m, err = ngx.re.match(uri, re)
-    ngx.log(ngx.DEBUG, 'Validating URI: ', uri, '. Found match? ', m ~= nil, ', error: ', err)
 
     if not m then
         return false
@@ -225,10 +224,7 @@ end
 ---
 function _M:_putData(session, data)
     local dataObj = serializers[session.encoding].encode(data)
-
-    ngx.log(ngx.DEBUG, "Preparing data for client ", session.sessId, ": ", dataObj)
     store:putData(session, dataObj)
-    ngx.log(ngx.DEBUG, "Pushed data for client into store")
 end
 
 ---
@@ -247,8 +243,6 @@ function _M:_publishEvent(sessRegIds, subId, pubId, details, args, argsKW)
     --             PUBLISH.Arguments|list]
     -- WAMP SPEC: [EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict,
     --             PUBLISH.Arguments|list, PUBLISH.ArgumentKw|dict]
-
-    ngx.log(ngx.DEBUG, "Publish events, sessions to notify: ", #sessRegIds)
 
     local data
     if not args and not argsKW then
@@ -350,8 +344,6 @@ function _M:_callMetaRPC(part, rpcUri, session, requestId, rpcArgsL) --, rpcArgs
     local details = setmetatable({}, { __jsontype = 'object' })
 
     if config.metaAPI[part] == true then
-
-        ngx.log(ngx.DEBUG, "Processing Call to META RPC '", rpcUri, "'")
 
         if rpcUri == 'wamp.session.count' then
 
@@ -514,8 +506,6 @@ function _M:_assignTrustLevel(session)
     if config.trustLevels.authType == "static" then
 
         if session.authInfo and session.authInfo.authid then
-
-            ngx.log(ngx.DEBUG, "Checking trustlevel for client authid '", session.authInfo.authid, "'")
             for _, value in ipairs(config.trustLevels.staticCredentials.byAuthid) do
                 if session.authInfo.authid == value.authid then
                     trustlevel = value.trustlevel
@@ -529,8 +519,6 @@ function _M:_assignTrustLevel(session)
         end
 
         if session.authInfo and session.authInfo.authrole then
-
-            ngx.log(ngx.DEBUG, "Checking trustlevel for client authrole '", session.authInfo.authrole, "'")
             for _, value in ipairs(config.trustLevels.staticCredentials.byAuthRole) do
                 if session.authInfo.authrole == value.authrole then
                     trustlevel = value.trustlevel
@@ -542,8 +530,6 @@ function _M:_assignTrustLevel(session)
                 return trustlevel
             end
         end
-
-        ngx.log(ngx.DEBUG, "Checking trustlevel for client ip '", clientIp, "'")
         for _, value in ipairs(config.trustLevels.staticCredentials.byClientIp) do
             if clientIp == value.clientip then
                 trustlevel = value.trustlevel
@@ -585,8 +571,6 @@ function _M:receiveData(regId, data)
     end
 
     local dataObj = serializers[session.encoding].decode(data)
-
-    ngx.log(ngx.DEBUG, "Cli regId: ", regId, " Received data. WAMP msg Id: ", dataObj[1])
 
     -- Analyze WAMP message ID received
     if dataObj[1] == WAMP_MSG_SPEC.HELLO then -- WAMP SPEC: [HELLO, Realm|uri, Details|dict]
@@ -871,7 +855,6 @@ function _M:receiveData(regId, data)
                 local recipients = store:getEventRecipients(session.realm, dataObj[4], regId, options)
 
                 for _, v in ipairs(recipients) do
-                    ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(v.subId))
                     self:_publishEvent(v.sessions, v.subId, pubId, v.details, dataObj[5], dataObj[6])
 
                     if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
@@ -1035,7 +1018,6 @@ function _M:receiveData(regId, data)
                             local ok, err = ngx.timer.at(dataObj[3].timeout, callCancel, calleeSess, invReqId)
 
                             if not ok then
-                                ngx.log(ngx.ERR, "failed to create timer: ", err)
                             end
                         end
 
@@ -1248,8 +1230,6 @@ function _M:receiveData(regId, data)
         })
         store:setHandlerFlags(regId, { close = true, sendLast = true })
     end
-
-    ngx.log(ngx.DEBUG, "Exiting receiveData()")
 end
 
 ---
@@ -1284,8 +1264,6 @@ end
 --- @param data any data, received through POST
 ---
 function _M:processPostData(sid, realm, data)
-
-    ngx.log(ngx.DEBUG, "Received POST data for processing in realm ", realm, ":", data)
 
     local dataObj = serializers.json.decode(data)
     local res
