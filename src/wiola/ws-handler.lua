@@ -4,13 +4,12 @@
 -- Date: 16.03.14
 --
 
---local getdump = require("debug.vardump").getdump
+local numericbin = require("debug.vardump").numericbin
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
 local semaphore = require "ngx.semaphore"
 local sema = semaphore.new()
-local mime = require("mime")
 local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
 local storeDataCount = 0
@@ -38,15 +37,15 @@ ngx.log(ngx.DEBUG, "New websocket client from ", ngx.var.remote_addr, ". Conn Id
 ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", ngx.header["Sec-WebSocket-Protocol"])
 
 local function removeConnection(_, sessId)
-    local ok, err
+    local okk, errr
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    ok, err = store:init(wconfig)
-    if not ok then
-        ngx.log(ngx.DEBUG, "Can not init datastore!", err)
+    okk, errr = store:init(wconfig)
+    if not okk then
+        ngx.log(ngx.DEBUG, "Can not init datastore!", errr)
     else
         store:removeSession(sessId)
         ngx.log(ngx.DEBUG, "Session data successfully removed!")
@@ -209,7 +208,8 @@ while true do
 
             if cliData ~= ngx.null and cliData then
                 if dataType == 'binary' then
-                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", mime.qp(cliData), ". Sending...")
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+                    --ngx.log(ngx.DEBUG, "Escaped binary data: ", numericbin(cliData), ". Sending...")
                     bytes, err = webSocket:send_binary(cliData)
                 else
                     ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
