@@ -27,7 +27,9 @@ local function printdump(value, depth, key)
     if depth == nil then
         depth = 0
     else
-        for _ = 1, depth do spaces = spaces .. '  ' end
+        for _ = 1, depth do
+            spaces = spaces .. '  '
+        end
         depth = depth + 1
         spaces = spaces .. ' » '
     end
@@ -78,7 +80,9 @@ local function getdump(value, depth, key)
     if depth == nil then
         depth = 0
     else
-        for _ = 1, depth do spaces = spaces .. '  ' end
+        for _ = 1, depth do
+            spaces = spaces .. '  '
+        end
         depth = depth + 1
         spaces = spaces .. ' » '
     end
@@ -107,7 +111,12 @@ local function getdump(value, depth, key)
     return result
 end
 
+local function numericbin(s)
+    return(table.concat({string.byte(s, 0, -1)}, ' '))
+end
+
 _M.printdump = printdump
 _M.getdump = getdump
+_M.escapebin = numericbin
 
 return _M
