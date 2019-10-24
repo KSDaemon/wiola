@@ -23,7 +23,8 @@ module.exports = function (grunt) {
                 options: {
                     process: function (content, srcpath) {
                         return content.replace(/\s*(\-\-)?\s*ngx\.log.*/g, '')
-                            .replace(/.*getdump.*/g, '');
+                            .replace(/.*getdump.*/g, '')
+                            .replace(/.*numericbin.*/g, '');
                     }
                 }
             },
@@ -35,7 +36,8 @@ module.exports = function (grunt) {
                 options: {
                     process: function (content, srcpath) {
                         return content.replace(/\s*(\-\-)?\s*ngx\.log.*/g, '')
-                            .replace(/.*getdump.*/g, '');
+                            .replace(/.*getdump.*/g, '')
+                            .replace(/.*numericbin.*/g, '');
                     }
                 }
             }
