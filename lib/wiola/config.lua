@@ -28,6 +28,7 @@ local storeConfigs = {
 
 -- Wiola Runtime configuration
 local wiolaConf = {
+    debug = false,
     socketTimeout = 100,
     maxPayloadLen = 65536,
     pingInterval = 1000,  -- interval in ms for sending ping frames. set to 0 for disabling
@@ -96,15 +97,19 @@ function _M.config(config)
         return wiolaConf
     end
 
-    if config.socketTimeout then
+    if config.debug ~= nil then
+        wiolaConf.debug = config.debug
+    end
+
+    if config.socketTimeout ~= nil then
         wiolaConf.socketTimeout = config.socketTimeout
     end
 
-    if config.maxPayloadLen then
+    if config.maxPayloadLen ~= nil then
         wiolaConf.maxPayloadLen = config.maxPayloadLen
     end
 
-    if config.pingInterval then
+    if config.pingInterval ~= nil then
         wiolaConf.pingInterval = config.pingInterval
     end
 

@@ -10,7 +10,6 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local semaphore = require "ngx.semaphore"
 local sema = semaphore.new()
-local mime = require("mime")
 local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
 local storeDataCount = 0
@@ -32,13 +31,13 @@ end
 local sessionId, dataType = wampServer:addConnection(ngx.var.connection, ngx.header["Sec-WebSocket-Protocol"])
 
 local function removeConnection(_, sessId)
-    local ok, err
+    local okk, errr
 
     local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    ok, err = store:init(wconfig)
-    if not ok then
+    okk, errr = store:init(wconfig)
+    if not okk then
     else
         store:removeSession(sessId)
     end
