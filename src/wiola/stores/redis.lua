@@ -324,7 +324,7 @@ end
 --- Prepare data for sending to client
 ---
 --- @param session table Session information
---- @param data table data for client
+--- @param data any data for client
 ---
 function _M:putData(session, data)
     local redis = ngx.ctx.redis
