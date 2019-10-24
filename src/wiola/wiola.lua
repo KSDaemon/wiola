@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
---local getdump = require("debug.vardump").getdump
+local getdump = require("debug.vardump").getdump
 
 local _M = {
     _VERSION = '0.12.1',
@@ -224,9 +224,9 @@ end
 --- @param data any Client data
 ---
 function _M:_putData(session, data)
-    local dataObj = serializers[session.encoding].encode(data)
 
-    ngx.log(ngx.DEBUG, "Preparing data for client ", session.sessId, ": ", dataObj)
+    ngx.log(ngx.DEBUG, "Preparing data for client ", session.sessId, ": \n", getdump(data))
+    local dataObj = serializers[session.encoding].encode(data)
     store:putData(session, dataObj)
     ngx.log(ngx.DEBUG, "Pushed data for client into store")
 end
