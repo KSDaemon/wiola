@@ -26,7 +26,11 @@ local wiola = require "wiola"
 local config = require("wiola.config").config()
 local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
 local bit = require "bit"
+local semaphore = require "ngx.semaphore"
+local sema = semaphore.new()
 local tcpSocket, wampServer, cliMaxLength, serializer, serializerStr, data, err, ok, cliData, pingCo
+local socketData = {}
+local storeDataCount = 0
 
 tcpSocket, err = ngx.req.socket(true)
 
@@ -87,6 +91,7 @@ if not data then
 end
 
 local function removeConnection(_, sessId)
+    local ok, err
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local wconfig = require("wiola.config").config()
@@ -144,81 +149,162 @@ if config.pingInterval > 0 then
     pingCo = ngx.thread.spawn(pinger, config.pingInterval / 1000)
 end
 
-while true do
-    local hflags, msgType, msgLen
+local redNotifier = function ()
+    local redisOk, redis, lres, lerr
+    local redisLib = require "resty.redis"
 
-    --    ngx.log(ngx.DEBUG, "Checking data for client...")
-    hflags = wampServer:getHandlerFlags(sessionId)
-    cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+    redis = redisLib:new()
+    redis:set_timeout(0)
 
-    if cliData ~= ngx.null and cliData then
-
-        msgLen = string.len(cliData)
-
-        if msgLen < cliMaxLength then
-            ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
-            cliData = string.char(0) .. getLenBytes(msgLen) .. cliData
-            data, err = tcpSocket:send(cliData)
-
-            if not data then
-                ngx.log(ngx.ERR, "Failed to send data: ", err)
-            end
-        end
-
-        -- TODO Handle exceeded message length situation
+    if config.storeConfig.port == nil then
+        redisOk, lerr = redis:connect(config.storeConfig.host)
+    else
+        redisOk, lerr = redis:connect(config.storeConfig.host, config.storeConfig.port)
     end
 
-    if hflags.close == true then
-        ngx.log(ngx.DEBUG, "Got close connection flag for session")
-        if pingCo then
-            ngx.thread.kill(pingCo)
-        end
-        tcpSocket:shutdown("send")
-        ngx.timer.at(0, removeConnection, sessionId)
-        ngx.exit(ngx.OK)
+    if redisOk and config.storeConfig.db ~= nil then
+        redis:select(config.storeConfig.db)
     end
 
-    data, err = tcpSocket:receive(4)
-
-    if data ~= nil then
-        msgType = bit.band(string.byte(data), 0xff)
-        msgLen = bit.lshift(string.byte(data, 2), 16) +
-                bit.lshift(string.byte(data, 3), 8) +
-                string.byte(data, 4)
-
-        if msgType == 0 then    -- regular WAMP message
-
-            data, err = tcpSocket:receive(msgLen)
-
-            if data == nil then
-                ngx.log(ngx.ERR, "Failed to receive data: ", err)
-                ngx.timer.at(0, removeConnection, sessionId)
-                ngx.exit(ngx.ERROR)
-            end
-
-            ngx.log(ngx.DEBUG, "Received client data: ", data)
-            wampServer:receiveData(sessionId, data)
-
-        elseif msgType == 1 then    -- PING
-
-            data, err = tcpSocket:receive(msgLen)
-
-            if data == nil then
-                ngx.log(ngx.ERR, "Failed to receive data: ", err)
-                ngx.timer.at(0, removeConnection, sessionId)
-                ngx.exit(ngx.ERROR)
-            end
-
-            cliData = string.char(2) .. msgLen .. data
-            data, err = tcpSocket:send(cliData)
-
-            if not data then
-                ngx.log(ngx.ERR, "Failed to send data: ", err)
-            end
-        end
-    elseif err == 'closed' then
-        ngx.log(ngx.DEBUG, "Error reading socket: ", err)
+    if not redisOk then
+        ngx.log(ngx.ERR, "Failed to read initialize redis connection: ", lerr)
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
+    end
+
+    local sesskey = "__keyspace@" ..
+            (config.storeConfig.db or 0) ..
+            "__:wiSes" ..
+            string.format("%.0f", sessionId) ..
+            "Data"
+    ngx.log(ngx.DEBUG, "Subscribing to redis notification for key: ", sesskey)
+    lres, lerr = redis:subscribe(sesskey)
+    if not lres then
+        ngx.log(ngx.ERR, "Failed to subscribe to redis topic: ", lerr)
+        ngx.timer.at(0, removeConnection, sessionId)
+        ngx.exit(ngx.ERROR)
+    end
+
+    coroutine.yield()
+
+    while true do
+        lres, lerr = redis:read_reply()
+        if not lres then
+            ngx.log(ngx.ERR, "Failed to read redis reply: ", lerr)
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.ERROR)
+        end
+
+        ngx.log(ngx.DEBUG, "Received redis notification!")
+        if lres[1] == "message" and lres[3] == "rpush" then
+            ngx.log(ngx.DEBUG, "Received rpush redis notification!")
+            storeDataCount = storeDataCount + 1
+            sema:post(1)
+        end
+    end
+end
+
+ngx.thread.spawn(redNotifier)
+
+local SocketHandler = function ()
+    while true do
+        local sockData, err, msgType, msgLen
+
+        sockData, err = tcpSocket:receive(4)
+
+        if sockData ~= nil then
+            msgType = bit.band(string.byte(sockData), 0xff)
+            msgLen = bit.lshift(string.byte(sockData, 2), 16) +
+                    bit.lshift(string.byte(sockData, 3), 8) +
+                    string.byte(sockData, 4)
+
+            if msgType == 0 then    -- regular WAMP message
+
+                sockData, err = tcpSocket:receive(msgLen)
+
+                if sockData == nil then
+                    ngx.log(ngx.ERR, "Failed to receive data: ", err)
+                    ngx.timer.at(0, removeConnection, sessionId)
+                    ngx.exit(ngx.ERROR)
+                end
+
+                ngx.log(ngx.DEBUG, "Received client data: ", sockData)
+                table.insert(socketData, sockData)
+                sema:post(1)
+
+            elseif msgType == 1 then    -- PING
+
+                sockData, err = tcpSocket:receive(msgLen)
+
+                if sockData == nil then
+                    ngx.log(ngx.ERR, "Failed to receive data: ", err)
+                    ngx.timer.at(0, removeConnection, sessionId)
+                    ngx.exit(ngx.ERROR)
+                end
+
+                cliData = string.char(2) .. msgLen .. sockData
+                sockData, err = tcpSocket:send(cliData)
+
+                if not sockData then
+                    ngx.log(ngx.ERR, "Failed to send data: ", err)
+                end
+            end
+        elseif err == 'closed' then
+            ngx.log(ngx.DEBUG, "Error reading socket: ", err)
+            ngx.timer.at(0, removeConnection, sessionId)
+            ngx.exit(ngx.ERROR)
+        end
+    end
+end
+
+ngx.thread.spawn(SocketHandler)
+
+
+while true do
+    local ok, err = sema:wait(60)  -- wait for a second at most
+    if not ok then
+        ngx.log(ngx.DEBUG, "main thread: failed to wait on sema: ", err)
+    else
+        local hflags, msgLen
+
+        ngx.log(ngx.DEBUG, "main thread: waited successfully.")
+
+        while storeDataCount > 0 do
+            hflags = wampServer:getHandlerFlags(sessionId)
+            cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+
+            if cliData ~= ngx.null and cliData then
+                msgLen = string.len(cliData)
+
+                if msgLen < cliMaxLength then
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ",
+                            cliData, ". Sending...")
+                    cliData = string.char(0) .. getLenBytes(msgLen) .. cliData
+                    data, err = tcpSocket:send(cliData)
+
+                    if not data then
+                        ngx.log(ngx.ERR, "Failed to send data: ", err)
+                    end
+                end
+
+                -- TODO Handle exceeded message length situation
+            end
+
+            if hflags.close == true then
+                ngx.log(ngx.DEBUG, "Got close connection flag for session")
+                if pingCo then
+                    ngx.thread.kill(pingCo)
+                end
+                tcpSocket:shutdown("send")
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.OK)
+            end
+
+            storeDataCount = storeDataCount - 1
+        end
+
+        while #socketData > 0 do
+            wampServer:receiveData(sessionId, table.remove(socketData, 1))
+        end
     end
 end
