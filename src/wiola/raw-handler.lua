@@ -78,10 +78,6 @@ else
     return ngx.exit(ngx.ERROR)
 end
 
-local sessionId, dataType = wampServer:addConnection(ngx.var.connection, serializerStr)
-ngx.log(ngx.DEBUG, "Adding connection to list. Conn Id: ", ngx.var.connection)
-ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", serializerStr)
-
 cliData = string.char(0x7F, bit.bor(bit.lshift(wiola_max_payload_len, 4), serializer), 0, 0)
 data, err = tcpSocket:send(cliData)
 
@@ -90,16 +86,20 @@ if not data then
     return ngx.exit(ngx.ERROR)
 end
 
+local sessionId, dataType = wampServer:addConnection(ngx.var.connection, serializerStr)
+ngx.log(ngx.DEBUG, "New rawsocket client from ", ngx.var.remote_addr, ". Conn Id: ", ngx.var.connection)
+ngx.log(ngx.DEBUG, "Session Id: ", sessionId, " selected protocol: ", serializerStr)
+
 local function removeConnection(_, sessId)
-    local ok, err
+    local okk, errr
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local wconfig = require("wiola.config").config()
     local store = require('wiola.stores.' .. config.store)
 
-    ok, err = store:init(wconfig)
-    if not ok then
-        ngx.log(ngx.DEBUG, "Can not init datastore!", err)
+    okk, errr = store:init(wconfig)
+    if not okk then
+        ngx.log(ngx.DEBUG, "Can not init datastore!", errr)
     else
         store:removeSession(sessId)
         ngx.log(ngx.DEBUG, "Session data successfully removed!")
@@ -167,7 +167,7 @@ local redNotifier = function ()
     end
 
     if not redisOk then
-        ngx.log(ngx.ERR, "Failed to read initialize redis connection: ", lerr)
+        ngx.log(ngx.ERR, "Failed to initialize redis connection: ", lerr)
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
     end
@@ -228,7 +228,7 @@ local SocketHandler = function ()
                     ngx.exit(ngx.ERROR)
                 end
 
-                ngx.log(ngx.DEBUG, "Received client data: ", sockData)
+                ngx.log(ngx.DEBUG, "Received client data")
                 table.insert(socketData, sockData)
                 sema:post(1)
 
@@ -277,8 +277,8 @@ while true do
                 msgLen = string.len(cliData)
 
                 if msgLen < cliMaxLength then
-                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ",
-                            cliData, ". Sending...")
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+                    --ngx.log(ngx.DEBUG, "Escaped client data: ", numericbin(cliData), ". Sending...")
                     cliData = string.char(0) .. getLenBytes(msgLen) .. cliData
                     data, err = tcpSocket:send(cliData)
 

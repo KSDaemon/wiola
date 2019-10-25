@@ -101,7 +101,7 @@ local redNotifier = function ()
     end
 
     if not redisOk then
-        ngx.log(ngx.ERR, "Failed to read initialize redis connection: ", lerr)
+        ngx.log(ngx.ERR, "Failed to initialize redis connection: ", lerr)
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
     end
