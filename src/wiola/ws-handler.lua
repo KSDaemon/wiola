@@ -4,7 +4,7 @@
 -- Date: 16.03.14
 --
 
-local numericbin = require("debug.vardump").numericbin
+--local numericbin = require("debug.vardump").numericbin
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
@@ -212,7 +212,8 @@ while true do
                     --ngx.log(ngx.DEBUG, "Escaped binary data: ", numericbin(cliData), ". Sending...")
                     bytes, err = webSocket:send_binary(cliData)
                 else
-                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Data: ", cliData, ". Sending...")
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+                    ngx.log(ngx.DEBUG, "Client data: ", cliData)
                     bytes, err = webSocket:send_text(cliData)
                 end
 

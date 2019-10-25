@@ -22,6 +22,7 @@ local WAMP_PAYLOAD_LENGTHS = {
     [16777216] = 15
 }
 
+--local numericbin = require("debug.vardump").numericbin
 local wiola = require "wiola"
 local config = require("wiola.config").config()
 local wiola_max_payload_len = WAMP_PAYLOAD_LENGTHS[config.maxPayloadLen] or 65536
