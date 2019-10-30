@@ -225,6 +225,7 @@ stream {
 
     server {
         listen 1234;
+        lua_check_client_abort on;
         content_by_lua_file $document_root/lua/wiola/raw-handler.lua;
     }
 
