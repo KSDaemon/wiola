@@ -21,6 +21,17 @@ ws = new Wampy('ws://webxp/ws/', {
                global.setTimeout(function () {
                    console.log('+' + (Date.now() - d) + 'ms: Publishing to topic');
                    ws.publish('message.received', ['New message'], null, { exclude_me: false });
+
+                  ws.call('com.arguments.add2.3', [3,4], 
+                        {
+                            onSuccess: function (e) {
+                                console.log('Reached success. Check Server side');
+                            },
+                            onError: function (e) {
+                                console.log(e);
+                            }
+                        });
+ 
                }, 5000);
            },
            onError: function (err) { console.log('+' + (Date.now() - d) + 'ms: Subscription error:' + err); },
