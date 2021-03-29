@@ -7,19 +7,21 @@ Lua WebSocket addon, and Redis as cache store.
 Table of Contents
 =================
 
-* [Description](#description)
-* [Usage example](#usage-example)
-* [Installation](#installation)
-* [Authentication](#authentication)
-* [Call and Publication trust levels](#call-and-publication-trust-levels)
-* [Methods](#methods)
-    * [config](#configconfig)
-    * [addConnection](#addconnectionsid-wampproto)
-    * [receiveData](#receivedataregid-data)
-    * [getPendingData](#getpendingdataregid)
-    * [processPostData](#processpostdatasid-realm-data)
-* [Copyright and License](#copyright-and-license)
-* [See Also](#see-also)
+- [wiola](#wiola)
+- [Table of Contents](#table-of-contents)
+- [Description](#description)
+- [Usage example](#usage-example)
+- [Installation](#installation)
+- [Authentication](#authentication)
+- [Call and Publication trust levels](#call-and-publication-trust-levels)
+- [Methods](#methods)
+  - [config(config)](#configconfig)
+  - [addConnection(sid, wampProto)](#addconnectionsid-wampproto)
+  - [receiveData(regId, data)](#receivedataregid-data)
+  - [getPendingData(regId)](#getpendingdataregid)
+  - [processPostData(sid, realm, data)](#processpostdatasid-realm-data)
+- [Copyright and License](#copyright-and-license)
+- [See Also](#see-also)
 
 Description
 ===========
@@ -85,9 +87,9 @@ To use wiola you need:
 Instead of compiling lua-* modules into nginx, you can simply use [OpenResty][] server.
 
 In any case, for your convenience, you can install Wiola through [luarocks](http://luarocks.org/modules/ksdaemon/wiola)
-by `luarocks install wiola` or through [OpenResty Package Manager] 
-by `opm install KSDaemon/wiola`. Unfortunately, not all dependencies are available in opm, so you need to manually 
-install missing ones. 
+by `luarocks install wiola` or through [OpenResty Package Manager]
+by `opm install KSDaemon/wiola`. Unfortunately, not all dependencies are available in opm, so you need to manually
+install missing ones.
 
 Next thing is configuring nginx host. See example below.
 
@@ -124,13 +126,13 @@ http {
             realms = { "app", "admin" },
             store = "redis",
             storeConfig = {
-                host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path  
+                host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path
                 --port = 6379                     -- Optional parameter. Should be set when using hostname/ip
                                                   -- Omit for socket connection
                 --db = 5                          -- Optional parameter. Redis db to use
             },
             callerIdentification = "auto",        -- Optional parameter. auto | never | always
-            cookieAuth = {                        -- Optional parameter. 
+            cookieAuth = {                        -- Optional parameter.
                 authType = "none",                -- none | static | dynamic
                 cookieName = "wampauth",
                 staticCredentials = nil, --{
@@ -185,24 +187,24 @@ http {
        # example location for websocket WAMP connection
        location /ws/ {
           set $wiola_max_payload_len 65535; # Optional parameter. Set the value to suit your needs
-          
+
           lua_socket_log_errors off;
           lua_check_client_abort on;
-    
+
           # This is needed to set additional websocket protocol headers
           header_filter_by_lua_file $document_root/lua/wiola/headers.lua;
           # Set a handler for connection
           content_by_lua_file $document_root/lua/wiola/ws-handler.lua;
        }
-    
+
        # example location for a lightweight POST event publishing
        location /wslight/ {
           lua_socket_log_errors off;
           lua_check_client_abort on;
-    
+
           content_by_lua_file $document_root/lua/wiola/post-handler.lua;
        }
-    
+
     }
 }
 ```
@@ -240,7 +242,7 @@ Edit redis.conf and set notify-keyspace-events option.
 
 ```
 notify-keyspace-events "Kl"
-```  
+```
 
 Actually, you do not need to do anything else. Just take any WAMP client and make a connection.
 
@@ -258,7 +260,7 @@ Beginning with v0.6.0 Wiola supports several types of authentication:
      * Static configuration
      * Dynamic callback
 
-Also it is possible to use both types of authentication :) 
+Also it is possible to use both types of authentication :)
 To setup authentication you need to [config](#configconfig) Wiola somewhere in nginx/openresty before request processing.
 In simple case, you can do it just in nginx http config section.
 
@@ -271,8 +273,8 @@ cfg.config({
         staticCredentials = { "user1:pass1", "user2:pass2"},
         authCallback = function (creds)
             -- Validate credentials somehow
-            -- return true, if valid 
-            if isValid(creds) then 
+            -- return true, if valid
+            if isValid(creds) then
                 return true
             end
 
@@ -288,7 +290,7 @@ cfg.config({
         challengeCallback = function (sessionid, authid)
             -- Generate a challenge string somehow and return it
             -- Do not forget to save it somewhere for response validation!
-            
+
             return "{ \"nonce\": \"LHRTC9zeOIrt_9U3\"," ..
                      "\"authprovider\": \"usersProvider\", \"authid\": \"" .. authid .. "\"," ..
                      "\"timestamp\": \"" .. os.date("!%FT%TZ") .. "\"," ..
@@ -313,7 +315,7 @@ Beginning with v0.9.0 Wiola supports Call and Publication trust levels labeling
 To setup trust levels you need to [config](#configconfig) Wiola somewhere in nginx/openresty before request processing.
 In simple case, you can do it just in nginx http config section.
 For static configuration, authid option takes precendence over authrole, which takes precendence over client ip.
-For example, if client match all three options (authid, authrole, client ip), than trust level from auth id will be set. 
+For example, if client match all three options (authid, authrole, client ip), than trust level from auth id will be set.
 
 ```lua
 local cfg = require "wiola.config"
@@ -344,10 +346,10 @@ cfg.config({
     trustLevels = {
         authType = "dynamic",
         authCallback = function (clientIp, realm, authid, authrole)
-        
+
             -- write your own logic for setting trust level
             -- just a simple example
-            
+
             if clientIp == "127.0.0.1" then
                 return 15
             end
@@ -370,14 +372,14 @@ Methods
 config(config)
 ------------------------------------------
 
-Configure Wiola Instance or retrieve current configuration. All options are optional. Some options have default value, 
+Configure Wiola Instance or retrieve current configuration. All options are optional. Some options have default value,
 or are nils if not specified.
 
 Parameters:
 
  * **config** - Configuration table with possible options:
     * **socketTimeout** - Timeout for underlying socket connection operations. Default: 100 ms
-    * **maxPayloadLen** - Maximal length of payload allowed when sending and receiving using underlying socket. 
+    * **maxPayloadLen** - Maximal length of payload allowed when sending and receiving using underlying socket.
     Default: 65536 bytes (2^16). For raw socket transport please use values, aligned with power of two between 9 and 24. 2^9, 2^10 .. 2^24.
     * **pingInterval** - Interval in ms for sending ping frames. Set to 0 for disabling server initiated ping. Default: 1000 ms
     * **realms** - Array of allowed WAMP realms. Default value: {} - so no clients will connect to router. Also it's possible
@@ -398,8 +400,8 @@ Parameters:
         * **staticCredentials** - table with keys, named as authids and values like { authrole = "userRole1", secret="secret1" },
         allowed to connect. Is used with authType="static"
         * **challengeCallback** - Callback function for generating challenge info. Is used with authType="dynamic".
-        Is called on HELLO message, passing session ID as first parameter and authid as second one. 
-        Should return challenge string the client needs to create a signature for. 
+        Is called on HELLO message, passing session ID as first parameter and authid as second one.
+        Should return challenge string the client needs to create a signature for.
         Check [Challenge Response Authentication section in WAMP Specification][] for more info.
         * **authCallback** - Callback function for checking auth signature. Is used with authType="dynamic".
         Is called on AUTHENTICATE message, passing session ID as first parameter and signature as second one.
@@ -407,10 +409,10 @@ Parameters:
         or nil | false in case of failure.
     * **trustLevels** - Trust levels configuration table:
         * **authType** - Type of auth. Possible values: none | static | dynamic. Default: "none", which means - don't use
-        * **defaultTrustLevel** - Default trust level for clients that doesn't match to any static credentials. 
+        * **defaultTrustLevel** - Default trust level for clients that doesn't match to any static credentials.
         Should be any positive integer or nil for omitting
         * **staticCredentials** - Is used with authType="static". Has 3 subtables:
-            * byAuthid. This array-like table holds items like `{ authid = "user1", trustlevel = 1 }`  
+            * byAuthid. This array-like table holds items like `{ authid = "user1", trustlevel = 1 }`
             * byAuthRole. This array-like table holds items like `{ authrole = "user-role", trustlevel = 2 }`
             * byClientIp. This array-like table holds items like `{ clientip = "127.0.0.1", trustlevel = 10 }`
         * **authCallback** - Callback function for getting trust level for client. It accepts (client ip address, realm,
@@ -419,7 +421,7 @@ Parameters:
         * **session** - Expose session meta api? Possible values: true | false. Default: false.
         * **subscription** - Expose subscription meta api? Possible values: true | false. Default: false.
         * **registration** - Expose registration meta api? Possible values: true | false. Default: false.
-        
+
 When called without parameters, returns current configuration.
 When setting configuration, returns nothing.
 
@@ -595,15 +597,15 @@ See Also
 
 [Back to TOC](#table-of-contents)
 
-Thanks JetBrains for support! Best IDEs for every language!
+Thanks JetBrains for the best IDEs and support for open source!
 
-[![JetBrains](https://user-images.githubusercontent.com/458096/54276284-086cad00-459e-11e9-9684-47536d9520c4.png)](https://www.jetbrains.com/?from=wampy.js)
+[![jetbrains logo]][jetbrains url]
 
 [WAMP specification]: http://wamp-proto.org/
 [Challenge Response Authentication section in WAMP Specification]: https://tools.ietf.org/html/draft-oberstet-hybi-tavendo-wamp-02#section-13.7.2.3
 [Wampy.js]: https://github.com/KSDaemon/wampy.js
 [OpenResty]: http://openresty.org
-[OpenResty Package Manager]: http://opm.openresty.org/ 
+[OpenResty Package Manager]: http://opm.openresty.org/
 [luajit]: http://luajit.org/
 [lua-nginx-module]: https://github.com/chaoslawful/lua-nginx-module
 [lua-resty-websocket]: https://github.com/agentzh/lua-resty-websocket
@@ -614,3 +616,6 @@ Thanks JetBrains for support! Best IDEs for every language!
 [lua-resty-hmac]: https://github.com/jamesmarlowe/lua-resty-hmac
 [redis-lua]: https://github.com/nrk/redis-lua
 [stream-lua-nginx-module]: https://github.com/openresty/stream-lua-nginx-module
+
+[jetbrains logo]: jetbrains.svg
+[jetbrains url]: (https://www.jetbrains.com)
