@@ -34,7 +34,7 @@ local function removeConnection(_, sessId)
     local okk, errr
 
     local wconfig = require("wiola.config").config()
-    local store = require('wiola.stores.' .. config.store)
+    local store = require('wiola.stores.' .. wconfig.store)
 
     okk, errr = store:init(wconfig)
     if not okk then
