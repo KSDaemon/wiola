@@ -125,20 +125,22 @@ local redNotifier = function ()
     while true do
         lres, lerr = redis:read_reply()
         if not lres then
-            ngx.log(ngx.ERR, "Failed to read redis reply: ", lerr)
-            ngx.timer.at(0, removeConnection, sessionId)
-            ngx.exit(ngx.ERROR)
-        end
-
-        ngx.log(ngx.DEBUG, "Received redis notification!")
-        if lres[1] == "message" and lres[3] == "rpush" then
-            ngx.log(ngx.DEBUG, "Received rpush redis notification!")
-            local elapsed, err = lockR:lock("dataCount" .. sessionId)
-            if elapsed ~= nil then
-                storeDataCount = storeDataCount + 1
-                sema:post(1)
+            if lerr ~= "timeout" then
+                ngx.log(ngx.ERR, "Failed to read redis reply: ", lerr)
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
             end
-            lockR:unlock()
+        else
+            ngx.log(ngx.DEBUG, "Received redis notification!")
+            if lres[1] == "message" and lres[3] == "rpush" then
+                ngx.log(ngx.DEBUG, "Received rpush redis notification!")
+                local elapsed, err = lockR:lock("dataCount" .. sessionId)
+                if elapsed ~= nil then
+                    storeDataCount = storeDataCount + 1
+                    sema:post(1)
+                end
+                lockR:unlock()
+            end
         end
     end
 end
