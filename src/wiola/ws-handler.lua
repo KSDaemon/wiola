@@ -41,7 +41,7 @@ local function removeConnection(_, sessId)
     ngx.log(ngx.DEBUG, "Cleaning up session: ", sessId)
 
     local wconfig = require("wiola.config").config()
-    local store = require('wiola.stores.' .. config.store)
+    local store = require('wiola.stores.' .. wconfig.store)
 
     okk, errr = store:init(wconfig)
     if not okk then
@@ -88,7 +88,7 @@ local redNotifier = function ()
     local redisLib = require "resty.redis"
 
     redis = redisLib:new()
-    redis:set_timeout(0)
+    redis:set_timeouts(1000, 1000, 1000)
 
     if config.storeConfig.port == nil then
         redisOk, lerr = redis:connect(config.storeConfig.host)
@@ -118,8 +118,6 @@ local redNotifier = function ()
         ngx.timer.at(0, removeConnection, sessionId)
         ngx.exit(ngx.ERROR)
     end
-
-    coroutine.yield()
 
     while true do
         lres, lerr = redis:read_reply()
