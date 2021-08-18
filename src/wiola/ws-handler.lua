@@ -9,8 +9,10 @@ local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
 local resty_lock = require "resty.lock"
+local semaphore = require "ngx.semaphore"
 local lockR = resty_lock:new("wiola")
 local lockS = resty_lock:new("wiola")
+local sema = semaphore.new()
 local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
 local storeDataCount = 0
@@ -134,6 +136,7 @@ local redNotifier = function ()
             local elapsed, err = lockR:lock("dataCount" .. sessionId)
             if elapsed ~= nil then
                 storeDataCount = storeDataCount + 1
+                sema:post(1)
             end
             lockR:unlock()
         end
@@ -184,6 +187,7 @@ local SocketHandler = function ()
             local elapsed, err = lockS:lock("socketData" .. sessionId)
             if elapsed ~= nil then
                 table.insert(socketData, data)
+                sema:post(1)
             end
             lockS:unlock()
 
@@ -193,6 +197,7 @@ local SocketHandler = function ()
             local elapsed, err = lockS:lock("socketData" .. sessionId)
             if elapsed ~= nil then
                 table.insert(socketData, data)
+                sema:post(1)
             end
             lockS:unlock()
 
@@ -203,53 +208,57 @@ end
 ngx.thread.spawn(SocketHandler)
 
 while true do
-    local hflags, cliData, bytes
+    local lok, lerr = sema:wait(60)
+    if not lok then
+        ngx.log(ngx.DEBUG, "main thread: failed to wait on sema: ", lerr)
+    else
+        local hflags, cliData, bytes
 
-    while storeDataCount > 0 do
-        hflags = wampServer:getHandlerFlags(sessionId)
-        cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
+        while storeDataCount > 0 do
+            hflags = wampServer:getHandlerFlags(sessionId)
+            cliData = wampServer:getPendingData(sessionId, hflags.sendLast)
 
-        if cliData ~= ngx.null and cliData then
-            if dataType == 'binary' then
-                ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
-                --ngx.log(ngx.DEBUG, "Escaped binary data: ", numericbin(cliData), ". Sending...")
-                bytes, err = webSocket:send_binary(cliData)
-            else
-                ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
-                ngx.log(ngx.DEBUG, "Client data: ", cliData)
-                bytes, err = webSocket:send_text(cliData)
+            if cliData ~= ngx.null and cliData then
+                if dataType == 'binary' then
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+                    --ngx.log(ngx.DEBUG, "Escaped binary data: ", numericbin(cliData), ". Sending...")
+                    bytes, err = webSocket:send_binary(cliData)
+                else
+                    ngx.log(ngx.DEBUG, "Got data for client. DataType is ", dataType, ". Sending...")
+                    ngx.log(ngx.DEBUG, "Client data: ", cliData)
+                    bytes, err = webSocket:send_text(cliData)
+                end
+
+                if not bytes then
+                    ngx.log(ngx.ERR, "Failed to send data: ", err)
+                end
             end
 
-            if not bytes then
-                ngx.log(ngx.ERR, "Failed to send data: ", err)
+            if hflags.close == true then
+                ngx.log(ngx.DEBUG, "Got close connection flag for session")
+                if pingCo then
+                    ngx.thread.kill(pingCo)
+                end
+                webSocket:send_close(1000, "Closing connection")
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.OK)
             end
+
+            local elapsed, err = lockR:lock("dataCount" .. sessionId)
+            if elapsed ~= nil then
+                storeDataCount = storeDataCount - 1
+            end
+            lockR:unlock()
+
         end
 
-        if hflags.close == true then
-            ngx.log(ngx.DEBUG, "Got close connection flag for session")
-            if pingCo then
-                ngx.thread.kill(pingCo)
-            end
-            webSocket:send_close(1000, "Closing connection")
-            ngx.timer.at(0, removeConnection, sessionId)
-            ngx.exit(ngx.OK)
-        end
-
-        local elapsed, err = lockR:lock("dataCount" .. sessionId)
+        local elapsed, err = lockS:lock("socketData" .. sessionId)
         if elapsed ~= nil then
-            storeDataCount = storeDataCount - 1
+            while #socketData > 0 do
+                wampServer:receiveData(sessionId, table.remove(socketData, 1))
+            end
         end
-        lockR:unlock()
+        lockS:unlock()
 
     end
-
-    local elapsed, err = lockS:lock("socketData" .. sessionId)
-    if elapsed ~= nil then
-        while #socketData > 0 do
-            wampServer:receiveData(sessionId, table.remove(socketData, 1))
-        end
-    end
-    lockS:unlock()
-
-    ngx.sleep(0)
 end
