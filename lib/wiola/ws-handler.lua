@@ -8,7 +8,10 @@
 local wsServer = require "resty.websocket.server"
 local wiola = require "wiola"
 local config = require("wiola.config").config()
+local resty_lock = require "resty.lock"
 local semaphore = require "ngx.semaphore"
+local lockR = resty_lock:new("wiola")
+local lockS = resty_lock:new("wiola")
 local sema = semaphore.new()
 local wampServer, webSocket, ok, err, pingCo
 local socketData = {}
@@ -75,7 +78,7 @@ local redNotifier = function ()
     local redisLib = require "resty.redis"
 
     redis = redisLib:new()
-    redis:set_timeout(0)
+    redis:set_timeouts(1000, 1000, 1000)
 
     if config.storeConfig.port == nil then
         redisOk, lerr = redis:connect(config.storeConfig.host)
@@ -103,17 +106,22 @@ local redNotifier = function ()
         ngx.exit(ngx.ERROR)
     end
 
-    coroutine.yield()
-
     while true do
         lres, lerr = redis:read_reply()
         if not lres then
-            ngx.timer.at(0, removeConnection, sessionId)
-            ngx.exit(ngx.ERROR)
-        end
-        if lres[1] == "message" and lres[3] == "rpush" then
-            storeDataCount = storeDataCount + 1
-            sema:post(1)
+            if lerr ~= "timeout" then
+                ngx.timer.at(0, removeConnection, sessionId)
+                ngx.exit(ngx.ERROR)
+            end
+        else
+            if lres[1] == "message" and lres[3] == "rpush" then
+                local elapsed, err = lockR:lock("dataCount" .. sessionId)
+                if elapsed ~= nil then
+                    storeDataCount = storeDataCount + 1
+                    sema:post(1)
+                end
+                lockR:unlock()
+            end
         end
     end
 end
@@ -151,12 +159,21 @@ local SocketHandler = function ()
     --    elseif typ == "pong" then
 
         elseif typ == "text" then -- Received something texty
-            table.insert(socketData, data)
-            sema:post(1)
+            local elapsed, err = lockS:lock("socketData" .. sessionId)
+            if elapsed ~= nil then
+                table.insert(socketData, data)
+                sema:post(1)
+            end
+            lockS:unlock()
 
         elseif typ == "binary" then -- Received something binary
-            table.insert(socketData, data)
-            sema:post(1)
+            local elapsed, err = lockS:lock("socketData" .. sessionId)
+            if elapsed ~= nil then
+                table.insert(socketData, data)
+                sema:post(1)
+            end
+            lockS:unlock()
+
         end
     end
 end
@@ -164,8 +181,8 @@ end
 ngx.thread.spawn(SocketHandler)
 
 while true do
-    local ok, err = sema:wait(60)  -- wait for a second at most
-    if not ok then
+    local lok, lerr = sema:wait(60)
+    if not lok then
     else
         local hflags, cliData, bytes
 
@@ -193,11 +210,21 @@ while true do
                 ngx.exit(ngx.OK)
             end
 
-            storeDataCount = storeDataCount - 1
+            local elapsed, err = lockR:lock("dataCount" .. sessionId)
+            if elapsed ~= nil then
+                storeDataCount = storeDataCount - 1
+            end
+            lockR:unlock()
+
         end
 
-        while #socketData > 0 do
-            wampServer:receiveData(sessionId, table.remove(socketData, 1))
+        local elapsed, err = lockS:lock("socketData" .. sessionId)
+        if elapsed ~= nil then
+            while #socketData > 0 do
+                wampServer:receiveData(sessionId, table.remove(socketData, 1))
+            end
         end
+        lockS:unlock()
+
     end
 end

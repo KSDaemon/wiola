@@ -89,6 +89,11 @@ local findPatternedUri = function(uriList, uri, all)
 
         p1dots = string.find(p1, "..", 1, true) or p1l
         p2dots = string.find(p2, "..", 1, true) or p2l
+
+        if p1dots == p1l and p2dots == p2l then
+            return (p1l > p2l)
+        end
+
         p1v = string.sub(p1, 1, p1dots)
         p2v = string.sub(p2, 1, p2dots)
         _, p1c = string.gsub(p1v, "%.", "")
