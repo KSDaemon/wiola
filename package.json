@@ -1,6 +1,6 @@
 {
-  "name": "Wiola",
-  "version": "0.13.0",
+  "name": "wiola",
+  "version": "0.13.1",
   "description": "WAMP implementation in Lua",
   "repository": {
     "type": "git",
