@@ -1,0 +1,232 @@
+worker_processes  1;
+
+#error_log  logs/error.log;
+error_log  logs/error.log  debug;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+
+    include mime.types;
+    default_type  application/octet-stream;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
+    resolver 127.0.0.11 ipv6=off;
+
+    # set search paths for pure Lua external libraries (';;' is the default path):
+    # add paths for wiola and msgpack libs
+    lua_package_path '/usr/local/openresty/site/lualib/?.lua;/usr/local/openresty/luajit/share/lua/5.1/?.lua;;';
+    lua_package_cpath '/usr/local/openresty/site/lualib/?.lua;/usr/local/openresty/luajit/share/lua/5.1/?.lua;;';
+    lua_shared_dict wiola 1m;
+
+    init_worker_by_lua_block {
+        -- Initializing math.randomseed for every worker/luaVM
+        local f = io.open('/dev/random', 'rb')
+        local seed
+        if f then
+            local b1, b2, b3, b4 = string.byte(f:read(4), 1, 4)
+            seed = b1 * 0x1000000 + b2 * 0x10000 + b3 * 0x100 + b4
+            f:close()
+        else
+            seed = ngx.time() + ngx.worker.pid()
+        end
+        math.randomseed(seed)
+        math.randomseed = function()end
+    }
+
+    init_by_lua_block {
+        -- Wiola configuration. You can read more in description of .configure() method below.
+        local cfg = require "wiola.config"
+        cfg.config({
+            socketTimeout = 1000,           -- one second
+            maxPayloadLen = 65536,
+            pingInterval = 0,  -- interval in ms for sending ping frames. set to 0 for disabling
+            realms = { "app", "admin", "test", "dev" },
+            store = "redis",
+            storeConfig = {
+                --host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path
+                host = "redis",  -- Optional parameter. Can be hostname/ip or socket path
+                port = 6379,                     -- Optional parameter. Should be set when using hostname/ip
+                                                  -- Omit for socket connection
+                db = 0                          -- Optional parameter. Redis db to use
+            },
+            callerIdentification = "auto",        -- Optional parameter. auto | never | always
+            cookieAuth = {                        -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                cookieName = "wampauth",
+                staticCredentials = nil, --{
+                    -- "user1", "user2:password2", "secretkey3"
+                --},
+                authCallback = nil
+            },
+            wampCRA = {                           -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                staticCredentials = nil, --{
+                    -- user1 = { authrole = "userRole1", secret="secret1" },
+                    -- user2 = { authrole = "userRole2", secret="secret2" }
+                --},
+                challengeCallback = nil,
+                authCallback = nil
+            },
+            trustLevels = {                       -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                defaultTrustLevel = nil,
+                staticCredentials = {
+                    byAuthid = {
+                        --{ authid = "user1", trustlevel = 1 },
+                        --{ authid = "admin1", trustlevel = 5 }
+                    },
+                    byAuthRole = {
+                        --{ authrole = "user-role", trustlevel = 2 },
+                        --{ authrole = "admin-role", trustlevel = 4 }
+                    },
+                    byClientIp = {
+                        --{ clientip = "127.0.0.1", trustlevel = 10 }
+                    }
+                },
+                authCallback = nil -- function that accepts (client ip address, realm,
+                                   -- authid, authrole) and returns trust level
+            },
+            metaAPI = {                           -- Expose META API ? Optional parameter.
+                session = true,
+                subscription = true,
+                registration = true
+            }
+        })
+
+        -- If you want automatically clean up redis db during nginx restart uncomment next two lines
+        -- for this to work, you need redis-lua library
+        -- Use it only with lua_code_cache on; !!!
+        local wflush = require "wiola.flushdb"
+        wflush.flushAll()
+    }
+
+    server {
+
+        listen       80;
+        server_name  localhost;
+
+        access_log  logs/access.log;
+        error_log  logs/error.log debug;
+
+        lua_code_cache on;
+        root /usr/local/openresty/site/lualib/wiola;
+
+        location / {
+            lua_socket_log_errors off;
+            lua_check_client_abort on;
+
+            header_filter_by_lua_file $document_root/headers.lua;
+            content_by_lua_file $document_root/ws-handler.lua;
+        }
+    }
+}
+
+stream {
+
+    resolver 127.0.0.11 ipv6=off;
+
+    # set search paths for pure Lua external libraries (';;' is the default path):
+    # add paths for wiola and msgpack libs
+    lua_package_path '/usr/local/openresty/site/lualib/?.lua;/usr/local/openresty/luajit/share/lua/5.1/?.lua;;';
+    lua_package_cpath '/usr/local/openresty/site/lualib/?.lua;/usr/local/openresty/luajit/share/lua/5.1/?.lua;;';
+    #lua_shared_dict wiola 1m;
+
+    init_worker_by_lua_block {
+        -- Initializing math.randomseed for every worker/luaVM
+        local f = io.open('/dev/random', 'rb')
+        local seed
+        if f then
+            local b1, b2, b3, b4 = string.byte(f:read(4), 1, 4)
+            seed = b1 * 0x1000000 + b2 * 0x10000 + b3 * 0x100 + b4
+            f:close()
+        else
+            seed = ngx.time() + ngx.worker.pid()
+        end
+        math.randomseed(seed)
+        math.randomseed = function()end
+    }
+
+    init_by_lua_block {
+        -- Wiola configuration. You can read more in description of .configure() method below.
+        local cfg = require "wiola.config"
+        cfg.config({
+            socketTimeout = 1000,           -- one second
+            maxPayloadLen = 65536,
+            pingInterval = 0,  -- interval in ms for sending ping frames. set to 0 for disabling
+            realms = { "app", "admin", "test", "dev" },
+            store = "redis",
+            storeConfig = {
+                --host = "unix:///tmp/redis.sock",  -- Optional parameter. Can be hostname/ip or socket path
+                host = "redis",  -- Optional parameter. Can be hostname/ip or socket path
+                port = 6379,                     -- Optional parameter. Should be set when using hostname/ip
+                                                  -- Omit for socket connection
+                db = 0                          -- Optional parameter. Redis db to use
+            },
+            callerIdentification = "auto",        -- Optional parameter. auto | never | always
+            cookieAuth = {                        -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                cookieName = "wampauth",
+                staticCredentials = nil, --{
+                    -- "user1", "user2:password2", "secretkey3"
+                --},
+                authCallback = nil
+            },
+            wampCRA = {                           -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                staticCredentials = nil, --{
+                    -- user1 = { authrole = "userRole1", secret="secret1" },
+                    -- user2 = { authrole = "userRole2", secret="secret2" }
+                --},
+                challengeCallback = nil,
+                authCallback = nil
+            },
+            trustLevels = {                       -- Optional parameter.
+                authType = "none",                -- none | static | dynamic
+                defaultTrustLevel = nil,
+                staticCredentials = {
+                    byAuthid = {
+                        --{ authid = "user1", trustlevel = 1 },
+                        --{ authid = "admin1", trustlevel = 5 }
+                    },
+                    byAuthRole = {
+                        --{ authrole = "user-role", trustlevel = 2 },
+                        --{ authrole = "admin-role", trustlevel = 4 }
+                    },
+                    byClientIp = {
+                        --{ clientip = "127.0.0.1", trustlevel = 10 }
+                    }
+                },
+                authCallback = nil -- function that accepts (client ip address, realm,
+                                   -- authid, authrole) and returns trust level
+            },
+            metaAPI = {                           -- Expose META API ? Optional parameter.
+                session = true,
+                subscription = true,
+                registration = true
+            }
+        })
+
+        -- If you want automatically clean up redis db during nginx restart uncomment next two lines
+        -- for this to work, you need redis-lua library
+        -- Use it only with lua_code_cache on; !!!
+        local wflush = require "wiola.flushdb"
+        wflush.flushAll()
+    }
+
+    server {
+        listen 1234;
+        lua_check_client_abort on;
+        lua_code_cache on;
+
+        content_by_lua_file /usr/local/openresty/site/lualib/wiola/raw-handler.lua;
+        error_log       logs/error.log debug;
+    }
+
+}

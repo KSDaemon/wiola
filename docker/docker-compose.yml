@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  redis:
+    container_name: redis
+    build:
+      context: redis
+      dockerfile: Dockerfile
+  wiola:
+    container_name: wiola
+    build:
+      context: wiola
+      dockerfile: Dockerfile
+    ports:
+      - "8881:80"
+      - "8882:1234"
+    depends_on:
+      - redis
