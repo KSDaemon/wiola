@@ -873,11 +873,11 @@ function _M:receiveData(regId, data)
                 for _, v in ipairs(recipients) do
                     ngx.log(ngx.DEBUG, "Publishing event to subscription ID: ", ('%d'):format(v.subId))
                     self:_publishEvent(v.sessions, v.subId, pubId, v.details, dataObj[5], dataObj[6])
+                end
 
-                    if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
-                        -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
-                        self:_putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
-                    end
+                if dataObj[3].acknowledge and dataObj[3].acknowledge == true then
+                    -- WAMP SPEC: [PUBLISHED, PUBLISH.Request|id, Publication|id]
+                    self:_putData(session, { WAMP_MSG_SPEC.PUBLISHED, dataObj[2], pubId })
                 end
             else
                 self:_putData(session, {
